@@ -29,8 +29,8 @@ export default function AppLayout() {
   if (!user) return <Navigate to="/entrar" replace />
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#101116] text-[#F5F7FA]">
-      <header className="sticky top-0 z-40 border-b border-[#16171D] bg-[#101116]/95 backdrop-blur">
+    <div className="flex h-[100dvh] flex-col bg-[#101116] text-[#F5F7FA]">
+      <header className="shrink-0 z-40 border-b border-[#16171D] bg-[#101116]">
         <div className="mx-auto flex w-full sm:max-w-[900px] items-center gap-2 px-5 sm:px-0 py-4">
           <Link
             to="/grupos"
@@ -55,7 +55,7 @@ export default function AppLayout() {
         </div>
       </header>
 
-      <div className="mx-auto flex flex-1 w-full max-w-[900px] flex-col bg-[#101116]">
+      <div className="mx-auto flex flex-1 w-full max-w-[900px] flex-col overflow-y-auto bg-[#101116]">
         <main className="flex flex-1 flex-col overflow-x-hidden">
           <div className="flex flex-1 flex-col">
             <Outlet context={{ refreshKey }} />
