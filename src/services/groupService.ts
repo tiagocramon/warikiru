@@ -41,8 +41,8 @@ function buildDashboardGroupSummary(
     ]
     const summaryText =
       counterpartIds.length === 1
-        ? `${membersById.get(counterpartIds[0])?.name ?? '1 pessoa'} deve para voce`
-        : `${counterpartIds.length} pessoas devem para voce`
+        ? `${membersById.get(counterpartIds[0])?.name ?? '1 pessoa'} deve para ${currentMember.name}`
+        : `${counterpartIds.length} pessoas devem para ${currentMember.name}`
 
     return {
       groupId: group.id,
@@ -59,8 +59,8 @@ function buildDashboardGroupSummary(
     ]
     const summaryText =
       counterpartIds.length === 1
-        ? `Voce deve para ${membersById.get(counterpartIds[0])?.name ?? '1 pessoa'}`
-        : `Voce deve para ${counterpartIds.length} pessoas`
+        ? `${currentMember.name} deve para ${membersById.get(counterpartIds[0])?.name ?? '1 pessoa'}`
+        : `${currentMember.name} deve para ${counterpartIds.length} pessoas`
 
     return {
       groupId: group.id,
@@ -87,7 +87,7 @@ function buildDashboardGroupSummary(
     groupId: group.id,
     groupName: group.name,
     summaryKind: 'settled',
-    summaryText: 'Sem pendencias neste mes',
+    summaryText: 'Sem pendências neste mês',
     amount: null,
   }
 }

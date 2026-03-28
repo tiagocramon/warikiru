@@ -580,6 +580,32 @@ export default function GroupDetailPage() {
             </button>
           </div>
 
+          {balances.length > 0 ? (
+            <div className="flex flex-col gap-[8px]">
+              {balances.map((balance, index) => (
+                <div key={index} className="rounded-[8px] bg-surface-1 p-[20px]">
+                  <div className="flex gap-[8px] items-center">
+                    <div className="flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-full bg-[rgba(232,93,93,0.16)]">
+                      <DollarSign size={16} className="text-[#E85D5D]" />
+                    </div>
+                    <div className="flex min-w-0 flex-1 flex-col leading-[1.4]">
+                      <p className="text-[14px] font-normal text-[#A7ADBA]">
+                        {getMemberNameById(balance.from_member_id)} deve pagar para {getMemberNameById(balance.to_member_id)}
+                      </p>
+                      <p className="text-[16px] font-bold text-[#E85D5D]">
+                        {formatCurrency(balance.amount)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : memberStats.some((stat) => stat.total_share > 0) ? (
+            <div className="rounded-[8px] bg-surface-1 p-[20px]">
+              <p className="text-[16px] leading-[1.4] text-[#4CAF50]">As contas estao quitadas.</p>
+            </div>
+          ) : null}
+
           {monthExpenses.length > 0 ? (
             <div
               ref={chartRefCallback}
