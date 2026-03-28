@@ -17,19 +17,13 @@ export default function LandingPage() {
         <main className="flex flex-1 flex-col justify-end gap-10 px-5 sm:px-0 pb-10">
           <section className="flex flex-col gap-5">
             <h1 className="text-[48px] font-normal leading-none tracking-normal text-[#F5F7FA]">
-              <span className="block sm:inline">Divida </span>
-              <span className="block sm:inline">contas </span>
-              <span className="block sm:inline">com </span>
-              <span className="block sm:inline">clareza!</span>
+              <span className="block sm:inline">Divida contas </span>
+              <span className="block sm:inline">com clareza!</span>
             </h1>
 
             <p className="text-[16px] font-normal leading-[1.4] text-[#F5F7FA]">
-              <span className="block sm:inline">
-                <span className="text-[#F5C249]">Warikiru</span>
-                <span> ajuda você </span>
-              </span>
-              <span className="block sm:inline">a dividir contas, registrar </span>
-              <span className="block sm:inline">despesas e manter tudo </span>
+              <span className="block sm:inline"><span className="text-[#F5C249]">Warikiru</span> ajuda você a dividir contas, </span>
+              <span className="block sm:inline">registrar despesas e manter tudo </span>
               <span className="block sm:inline">transparente entre todos.</span>
             </p>
           </section>
