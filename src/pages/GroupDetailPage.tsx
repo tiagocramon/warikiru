@@ -841,7 +841,7 @@ export default function GroupDetailPage() {
                   <p className="text-[14px] font-normal leading-[1.4] text-[#A7ADBA]">
                     Gasto total de todos os membros por categoria
                   </p>
-                  <div className="flex gap-[8px] overflow-x-auto">
+                  <div className="flex gap-[8px] overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: 'none' }}>
                     {sortedCategories.map(([categoryValue, total]) => {
                       const categoryLabel =
                         EXPENSE_CATEGORIES.find((entry) => entry.value === categoryValue)?.label ??

@@ -47,7 +47,7 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
             className="fixed bottom-0 right-0 left-0 z-50 w-full max-w-[480px] mx-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex flex-col gap-[32px] rounded-t-[20px] bg-[#16171D] p-[20px]">
+            <div className="flex flex-col gap-[32px] rounded-t-[20px] bg-[#16171D] p-[20px] max-h-[calc(100dvh-40px)] overflow-y-auto">
               {/* Header - Fechar X */}
               <button
                 onClick={onClose}

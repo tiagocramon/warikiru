@@ -204,9 +204,9 @@ export default function EditGroupBottomSheet({ open, onClose, groupId }: EditGro
             className="fixed bottom-0 right-0 left-0 z-50 w-full max-w-[480px] mx-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex flex-col max-h-[calc(100vh-40px)] rounded-t-[20px] bg-[#16171D]">
+            <div className="flex flex-col max-h-[calc(100dvh-40px)] rounded-t-[20px] bg-[#16171D]">
               {/* Header - fixed */}
-              <div className="shrink-0 flex items-center justify-end gap-[4px] p-[20px] pb-0">
+              <div className="shrink-0 flex items-center justify-end gap-[4px] p-[20px]">
                 <button
                   onClick={onClose}
                   className="flex items-center gap-[4px]"
