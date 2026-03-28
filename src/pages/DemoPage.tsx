@@ -221,7 +221,7 @@ export default function DemoPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-[#101116] text-[#F5F7FA]">
+    <div className="min-h-dvh bg-[#101116] text-[#F5F7FA]">
       <div className="mx-auto flex w-full sm:max-w-[900px] flex-col bg-[#101116]">
         <PublicHeader />
 

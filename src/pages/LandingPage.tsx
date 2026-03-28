@@ -10,8 +10,8 @@ export default function LandingPage() {
   if (user) return <Navigate to="/grupos" replace />
 
   return (
-    <div className="min-h-screen bg-[#101116] text-[#F5F7FA]">
-      <div className="mx-auto flex min-h-screen w-full sm:max-w-[900px] flex-col bg-[#101116]">
+    <div className="min-h-dvh bg-[#101116] text-[#F5F7FA]">
+      <div className="mx-auto flex min-h-dvh w-full sm:max-w-[900px] flex-col bg-[#101116]">
         <PublicHeader />
 
         <main className="flex flex-1 flex-col justify-end gap-10 px-5 sm:px-0 pb-10">
