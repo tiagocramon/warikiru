@@ -19,7 +19,6 @@ import {
 import { useAuth } from '../contexts/AuthContext'
 import { useLocalToast } from '../hooks/useLocalToast'
 import type { GroupWithMembers, GroupMember } from '../types/database'
-import Input from '../components/ui/Input'
 import Button from '../components/ui/Button'
 import FloatingToast from '../components/ui/FloatingToast'
 import ModalWithToast from '../components/ui/ModalWithToast'

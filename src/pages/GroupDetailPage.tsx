@@ -14,7 +14,6 @@ import { useLocalToast } from '../hooks/useLocalToast'
 import type { GroupWithMembers, Expense, AuditLog, Payment } from '../types/database'
 import { EXPENSE_CATEGORIES } from '../types/database'
 import { calculateMonthlyBalance, calculateMemberStats } from '../lib/balance'
-import Button from '../components/ui/Button'
 import EmptyState from '../components/ui/EmptyState'
 import ModalWithToast from '../components/ui/ModalWithToast'
 import Spinner from '../components/ui/Spinner'
@@ -39,11 +38,9 @@ import {
   ChevronRight,
   Pencil,
   Trash2,
-  ArrowRight,
   Receipt,
   Clock,
   BarChart3,
-  Plus,
   Copy,
   ChevronDown,
   DollarSign,
@@ -155,15 +152,6 @@ function buildAreaPath(points: ChartPoint[], baselineY: number): string {
   return `${buildLinePath(points)} L ${lastPoint.x.toFixed(2)} ${baselineY.toFixed(
     2
   )} L ${firstPoint.x.toFixed(2)} ${baselineY.toFixed(2)} Z`
-}
-
-function getLastExpenseDay(expenses: Expense[]): number | null {
-  if (expenses.length === 0) return null
-
-  return expenses.reduce((latestDay, expense) => {
-    const expenseDay = parseISO(expense.date).getDate()
-    return expenseDay > latestDay ? expenseDay : latestDay
-  }, 0)
 }
 
 function buildMonthlyChartModel(month: string, expenses: Expense[], chartWidth: number): ChartModel {
@@ -282,7 +270,6 @@ export default function GroupDetailPage() {
   )
   const totalExpensesMonth = monthExpenses.reduce((sum, expense) => sum + expense.amount, 0)
   const chartModel = buildMonthlyChartModel(selectedMonth, monthExpenses, chartWidth)
-  const lastExpenseDay = getLastExpenseDay(monthExpenses)
   const selectedChartPoint =
     selectedChartDay == null
       ? null
@@ -292,10 +279,6 @@ export default function GroupDetailPage() {
     : -1
   const activeChartPoints =
     selectedChartIndex >= 0 ? chartModel.points.slice(0, selectedChartIndex + 1) : []
-  const chartLabelX = selectedChartPoint
-    ? clamp(selectedChartPoint.x, 56, chartModel.width - 56)
-    : 0
-
   const loadGroup = useCallback(async () => {
     if (!groupId) return
     const { data } = await fetchGroupDetail(groupId)
@@ -424,76 +407,6 @@ export default function GroupDetailPage() {
     return String(value)
   }
 
-  function renderAuditDetails(log: AuditLog) {
-    const fields = RELEVANT_FIELDS[log.entity_type] ?? []
-
-    if (log.action === 'create' && log.new_value) {
-      const items = fields.filter((field) => log.new_value?.[field] != null)
-      if (items.length === 0) return null
-
-      return (
-        <div className="mt-3 space-y-2">
-          {items.map((field) => (
-            <div key={field} className="flex items-baseline gap-2 text-body-sm">
-              <span className="text-text-tertiary">{FIELD_LABELS[field] || field}:</span>
-              <span className="text-text-primary">
-                {formatFieldValue(field, log.new_value?.[field])}
-              </span>
-            </div>
-          ))}
-        </div>
-      )
-    }
-
-    if (log.action === 'delete' && log.old_value) {
-      const items = fields.filter((field) => log.old_value?.[field] != null)
-      if (items.length === 0) return null
-
-      return (
-        <div className="mt-3 space-y-2">
-          {items.map((field) => (
-            <div key={field} className="flex items-baseline gap-2 text-body-sm">
-              <span className="text-text-tertiary">{FIELD_LABELS[field] || field}:</span>
-              <span className="text-text-disabled line-through">
-                {formatFieldValue(field, log.old_value?.[field])}
-              </span>
-            </div>
-          ))}
-        </div>
-      )
-    }
-
-    if (log.action === 'update' && log.old_value && log.new_value) {
-      const changedFields = fields.filter((field) => {
-        const oldValue = log.old_value?.[field]
-        const newValue = log.new_value?.[field]
-
-        return oldValue !== newValue && (oldValue != null || newValue != null)
-      })
-
-      if (changedFields.length === 0) return null
-
-      return (
-        <div className="mt-3 space-y-2">
-          {changedFields.map((field) => (
-            <div key={field} className="text-body-sm">
-              <span className="text-text-tertiary">{FIELD_LABELS[field] || field}: </span>
-              <span className="text-text-disabled line-through">
-                {formatFieldValue(field, log.old_value?.[field])}
-              </span>
-              <span className="mx-1 text-text-disabled">&rarr;</span>
-              <span className="font-medium text-text-primary">
-                {formatFieldValue(field, log.new_value?.[field])}
-              </span>
-            </div>
-          ))}
-        </div>
-      )
-    }
-
-    return null
-  }
-
   async function handleDeleteGroup() {
     if (!groupId) return
 
@@ -559,19 +472,6 @@ export default function GroupDetailPage() {
     }
 
     return actionMap[`${action}:${entityType}`] ?? `${action} ${entityType}`
-  }
-
-  function getActionIcon(action: string): { icon: ElementType; color: string; bg: string } {
-    switch (action) {
-      case 'create':
-        return { icon: Plus, color: 'text-accent', bg: 'bg-accent-subtle' }
-      case 'update':
-        return { icon: Pencil, color: 'text-info', bg: 'bg-info-subtle' }
-      case 'delete':
-        return { icon: Trash2, color: 'text-danger', bg: 'bg-danger-subtle' }
-      default:
-        return { icon: Clock, color: 'text-text-tertiary', bg: 'bg-surface-2' }
-    }
   }
 
   if (loading) {

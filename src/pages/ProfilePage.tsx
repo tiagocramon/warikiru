@@ -24,13 +24,12 @@ export default function ProfileBottomSheet({ open, onClose, onSuccess }: Profile
 
   const [groupsCount, setGroupsCount] = useState<number | null>(null)
   const [editingName, setEditingName] = useState(false)
-  const [savingName, setSavingName] = useState(false)
+  const [, setSavingName] = useState(false)
 
   const {
     register,
     handleSubmit,
     reset,
-    formState: { isSubmitting },
   } = useForm<ProfileNameForm>({
     resolver: zodResolver(profileNameSchema),
   })
