@@ -226,6 +226,19 @@ export default function DemoPage() {
         <PublicHeader />
 
         <main className="flex flex-col px-5 sm:px-0">
+          {/* Hero - Conceito Warikiru */}
+          <section className="flex flex-col items-center gap-4 py-12 sm:py-16 text-center">
+            <p className="text-[72px] sm:text-[96px] font-normal leading-none text-[#16171D]">
+              割り切る
+            </p>
+            <h2 className="text-[36px] font-medium leading-none text-[#F5F7FA]">
+              Dividir com clareza
+            </h2>
+            <p className="max-w-[400px] text-[14px] sm:text-[16px] font-normal leading-[1.5] text-[#A7ADBA]">
+              Do japonês <span className="text-[#F5C249]">割り切る</span> (warikiru): resolver dividindo de forma justa e transparente.
+            </p>
+          </section>
+
           {heroSections.map((section, i) => {
             const Icon = section.icon
             const isEven = i % 2 === 0
