@@ -281,6 +281,24 @@ export async function inviteMember(
   return { error }
 }
 
+export async function updatePendingMemberInviteEmail(memberId: string, email: string) {
+  const normalizedEmail = email.toLowerCase().trim()
+
+  const { data, error } = await supabase
+    .from('group_members')
+    .update({ invited_email: normalizedEmail })
+    .eq('id', memberId)
+    .eq('status', 'pending')
+    .is('user_id', null)
+    .select('id')
+    .maybeSingle()
+
+  if (error) return { error }
+  if (!data) return { error: new Error('Somente convites pendentes podem ter o e-mail alterado.') }
+
+  return { error: null }
+}
+
 export async function removeMember(memberId: string) {
   const { error } = await supabase
     .from('group_members')

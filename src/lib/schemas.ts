@@ -69,6 +69,10 @@ export const inviteMemberSchema = z.object({
   percentage: z.number({ error: 'Informe um número.' }).min(0, 'Mínimo 0.').max(100, 'Máximo 100.'),
 })
 
+export const editInviteEmailSchema = z.object({
+  email: z.string().min(1, 'Campo obrigatório.').email('E-mail inválido.'),
+})
+
 // Expense schema
 
 const expenseCategoryValues = [
@@ -126,4 +130,5 @@ export type ProfileNameForm = z.infer<typeof profileNameSchema>
 export type NewGroupForm = z.infer<typeof newGroupSchema>
 export type EditGroupForm = z.infer<typeof editGroupSchema>
 export type InviteMemberForm = z.infer<typeof inviteMemberSchema>
+export type EditInviteEmailForm = z.infer<typeof editInviteEmailSchema>
 export type ExpenseForm = z.infer<typeof expenseSchema>

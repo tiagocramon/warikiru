@@ -5,14 +5,17 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
   editGroupSchema,
+  editInviteEmailSchema,
   inviteMemberSchema,
   type EditGroupForm,
+  type EditInviteEmailForm,
   type InviteMemberForm,
 } from '../lib/schemas'
 import {
   fetchGroupDetail,
   updateGroup,
   inviteMember,
+  updatePendingMemberInviteEmail,
   removeMember,
   updateMemberPercentages,
 } from '../services/groupService'
@@ -28,17 +31,21 @@ interface EditGroupBottomSheetProps {
   open: boolean
   onClose: () => void
   groupId: string
+  initialGroup: GroupWithMembers | null
 }
 
-export default function EditGroupBottomSheet({ open, onClose, groupId }: EditGroupBottomSheetProps) {
+export default function EditGroupBottomSheet({ open, onClose, groupId, initialGroup }: EditGroupBottomSheetProps) {
   const { user } = useAuth()
   const { toasts, showToast } = useLocalToast()
 
-  const [group, setGroup] = useState<GroupWithMembers | null>(null)
+  const [group, setGroup] = useState<GroupWithMembers | null>(initialGroup)
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!initialGroup)
   const [saving, setSaving] = useState(false)
   const [removeMemberId, setRemoveMemberId] = useState<string | null>(null)
+  const [editingInviteMember, setEditingInviteMember] = useState<GroupMember | null>(null)
+  const [editingInviteError, setEditingInviteError] = useState('')
+  const [editingInviteSaving, setEditingInviteSaving] = useState(false)
 
   const editForm = useForm<EditGroupForm>({
     resolver: zodResolver(editGroupSchema),
@@ -49,29 +56,43 @@ export default function EditGroupBottomSheet({ open, onClose, groupId }: EditGro
     resolver: zodResolver(inviteMemberSchema),
     defaultValues: { percentage: 50 },
   })
+  const editInviteEmailForm = useForm<EditInviteEmailForm>({
+    resolver: zodResolver(editInviteEmailSchema),
+    defaultValues: { email: '' },
+  })
 
-  const loadGroup = useCallback(async () => {
+  const applyGroupData = useCallback((nextGroup: GroupWithMembers) => {
+    setGroup(nextGroup)
+    const pcts: Record<string, number> = {}
+    nextGroup.members.forEach((member) => {
+      pcts[member.id] = member.percentage
+    })
+    editForm.reset({ name: nextGroup.name, percentages: pcts })
+  }, [editForm])
+
+  const loadGroup = useCallback(async (options?: { showLoading?: boolean }) => {
     if (!groupId) return
-    setLoading(true)
+    const showLoading = options?.showLoading ?? true
+    if (showLoading) setLoading(true)
     const { data } = await fetchGroupDetail(groupId)
     if (data) {
-      const g = data as GroupWithMembers
-      setGroup(g)
-      const pcts: Record<string, number> = {}
-      g.members.forEach((m) => {
-        pcts[m.id] = m.percentage
-      })
-      editForm.reset({ name: g.name, percentages: pcts })
+      applyGroupData(data as GroupWithMembers)
     }
-    setLoading(false)
-  }, [groupId, editForm])
+    if (showLoading) setLoading(false)
+  }, [groupId, applyGroupData])
 
   useEffect(() => {
     if (open) {
-      loadGroup()
+      if (initialGroup) {
+        applyGroupData(initialGroup)
+        setLoading(false)
+        loadGroup({ showLoading: false })
+      } else {
+        loadGroup({ showLoading: true })
+      }
       setError('')
     }
-  }, [open, loadGroup])
+  }, [open, initialGroup, applyGroupData, loadGroup])
 
   useEffect(() => {
     if (!open) return
@@ -154,6 +175,47 @@ export default function EditGroupBottomSheet({ open, onClose, groupId }: EditGro
     }, 500)
   }
 
+  function handleOpenInviteEmailEditor(member: GroupMember) {
+    setEditingInviteError('')
+    setEditingInviteMember(member)
+    editInviteEmailForm.reset({ email: member.invited_email ?? '' })
+  }
+
+  function handleCloseInviteEmailEditor() {
+    setEditingInviteMember(null)
+    setEditingInviteError('')
+    setEditingInviteSaving(false)
+    editInviteEmailForm.reset({ email: '' })
+  }
+
+  async function handleSaveInviteEmail(data: EditInviteEmailForm) {
+    if (!editingInviteMember) return
+
+    setEditingInviteError('')
+    setEditingInviteSaving(true)
+
+    const { error } = await updatePendingMemberInviteEmail(editingInviteMember.id, data.email)
+
+    if (error) {
+      const isDuplicateInvite =
+        ('code' in error && error.code === '23505') ||
+        error.message?.includes('group_members_group_id_invited_email_key')
+
+      setEditingInviteError(
+        isDuplicateInvite
+          ? 'Ja existe um membro ou convite com esse e-mail neste grupo.'
+          : error.message || 'Erro ao atualizar e-mail do convite.'
+      )
+      showToast('Ops, tivemos um erro!', 'error')
+      setEditingInviteSaving(false)
+      return
+    }
+
+    await loadGroup()
+    handleCloseInviteEmailEditor()
+    showToast('E-mail do convite atualizado. Compartilhe o link novamente.', 'success')
+  }
+
   function adjustPercentage(memberId: string, delta: number) {
     const current = percentages?.[memberId] ?? 0
     const next = Math.max(0, Math.min(100, current + delta))
@@ -200,8 +262,9 @@ export default function EditGroupBottomSheet({ open, onClose, groupId }: EditGro
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
-            transition={{ type: 'tween', duration: 0.3, ease: 'easeOut' }}
+            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
             className="fixed bottom-0 right-0 left-0 z-50 w-full max-w-[480px] mx-auto"
+            style={{ maxHeight: 'calc(100dvh - env(safe-area-inset-top, 0px) - 16px)' }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex flex-col max-h-[calc(100dvh-40px)] rounded-t-[20px] bg-[#16171D]">
@@ -224,7 +287,7 @@ export default function EditGroupBottomSheet({ open, onClose, groupId }: EditGro
                     Editar Grupo
                   </p>
 
-                  {loading ? (
+                  {loading && !group ? (
                     <div className="flex items-center justify-center py-10">
                       <div className="animate-spin rounded-full h-6 w-6 border-2 border-accent border-t-transparent" />
                     </div>
@@ -238,7 +301,7 @@ export default function EditGroupBottomSheet({ open, onClose, groupId }: EditGro
 
                         {/* Nome do grupo */}
                         <div className="flex flex-col gap-[8px]">
-                          <p className="text-[16px] leading-[1.4] text-[#F5F7FA]">Seu Nome</p>
+                          <p className="text-[16px] leading-[1.4] text-[#F5F7FA]">Nome do Grupo</p>
                           <div className="flex items-center gap-[5px] h-[48px] bg-[#1C1D25] rounded-[8px] px-[16px]">
                             <input
                               type="text"
@@ -260,49 +323,56 @@ export default function EditGroupBottomSheet({ open, onClose, groupId }: EditGro
                           {group.members.map((member: GroupMember) => (
                             <div
                               key={member.id}
-                              className="flex items-center h-[48px] bg-[#1C1D25] rounded-[8px] px-[20px]"
+                              className="flex w-full flex-col items-start justify-center gap-[8px] rounded-[8px] bg-[#1C1D25] px-[20px] py-[8px]"
                             >
-                              <div className="flex items-center gap-[8px] shrink-0">
-                                {(!member.user_id || member.user_id !== group.owner_id) ? (
+                              <div className="flex w-full items-center">
+                                <div className="flex shrink-0 items-center gap-[8px] min-w-0">
+                                  {(!member.user_id || member.user_id !== group.owner_id) ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setRemoveMemberId(member.id)}
+                                      className="shrink-0 text-danger opacity-70 hover:opacity-100 transition-all"
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  ) : (
+                                    <Trash2 size={16} className="text-[#7C8394] opacity-20 shrink-0" />
+                                  )}
+                                  <p className="truncate text-[16px] leading-[1.4] text-[#F5F7FA]">
+                                    {member.name}
+                                  </p>
+                                </div>
+
+                                <div className="flex min-w-0 flex-[1_0_0] items-center justify-end gap-[16px]">
                                   <button
                                     type="button"
-                                    onClick={() => setRemoveMemberId(member.id)}
-                                    className="text-[#7C8394] opacity-50 hover:opacity-100 hover:text-danger transition-all"
+                                    onClick={() => adjustPercentage(member.id, -1)}
+                                    className="w-[32px] h-[32px] rounded-[8px] bg-[#252630] flex items-center justify-center text-[#F5F7FA] hover:bg-[#2E3040] transition-colors"
                                   >
-                                    <Trash2 size={16} />
+                                    <Minus size={16} />
                                   </button>
-                                ) : (
-                                  <Trash2 size={16} className="text-[#7C8394] opacity-20" />
-                                )}
-                                <span className="text-[16px] leading-[1.4] text-[#F5F7FA]">
-                                  {member.name}
-                                </span>
-                                {member.status === 'pending' && (
-                                  <span className="text-[10px] font-medium leading-none text-[#F5A623] bg-[rgba(245,166,35,0.16)] rounded-full px-[8px] py-[3px]">
-                                    Pendente
+                                  <span className="text-[20px] font-bold leading-[1.4] text-[#F5F7FA] text-center w-[40px]">
+                                    {percentages?.[member.id] ?? 0}
                                   </span>
-                                )}
+                                  <button
+                                    type="button"
+                                    onClick={() => adjustPercentage(member.id, 1)}
+                                    className="w-[32px] h-[32px] rounded-[8px] bg-[#252630] flex items-center justify-center text-[#F5F7FA] hover:bg-[#2E3040] transition-colors"
+                                  >
+                                    <Plus size={16} />
+                                  </button>
+                                </div>
                               </div>
 
-                              <div className="flex-1 flex items-center justify-end gap-[16px]">
+                              {member.status === 'pending' && !member.user_id && (
                                 <button
                                   type="button"
-                                  onClick={() => adjustPercentage(member.id, -1)}
-                                  className="w-[32px] h-[32px] rounded-[8px] bg-[#252630] flex items-center justify-center text-[#F5F7FA] hover:bg-[#2E3040] transition-colors"
+                                  onClick={() => handleOpenInviteEmailEditor(member)}
+                                  className="inline-flex h-[24px] w-fit items-center justify-center rounded-full bg-[rgba(245,194,73,0.16)] px-[20px] text-[12px] font-medium leading-[1.4] text-[#F5C249] hover:bg-[rgba(245,194,73,0.22)] transition-colors"
                                 >
-                                  <Minus size={16} />
+                                  Pendente - Editar E-mail
                                 </button>
-                                <span className="text-[20px] font-bold leading-[1.4] text-[#F5F7FA] text-center w-[40px]">
-                                  {percentages?.[member.id] ?? 0}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => adjustPercentage(member.id, 1)}
-                                  className="w-[32px] h-[32px] rounded-[8px] bg-[#252630] flex items-center justify-center text-[#F5F7FA] hover:bg-[#2E3040] transition-colors"
-                                >
-                                  <Plus size={16} />
-                                </button>
-                              </div>
+                              )}
                             </div>
                           ))}
 
@@ -353,22 +423,6 @@ export default function EditGroupBottomSheet({ open, onClose, groupId }: EditGro
                           Convidar um novo Membro
                         </p>
 
-                        {/* E-mail */}
-                        <div className="flex flex-col gap-[8px]">
-                          <p className="text-[16px] leading-[1.4] text-[#F5F7FA]">E-mail do convidado</p>
-                          <div className="flex items-center h-[48px] bg-[#1C1D25] rounded-[8px] px-[16px]">
-                            <input
-                              type="email"
-                              className="flex-1 bg-transparent text-[16px] leading-[1.4] text-[#F5F7FA] outline-none placeholder:text-[#7C8394]"
-                              placeholder="E-mail do convidado"
-                              {...inviteFormHook.register('email')}
-                            />
-                          </div>
-                          {inviteFormHook.formState.errors.email?.message && (
-                            <p className="text-[12px] text-danger">{inviteFormHook.formState.errors.email.message}</p>
-                          )}
-                        </div>
-
                         {/* Nome */}
                         <div className="flex flex-col gap-[8px]">
                           <p className="text-[16px] leading-[1.4] text-[#F5F7FA]">Nome do convidado</p>
@@ -382,6 +436,22 @@ export default function EditGroupBottomSheet({ open, onClose, groupId }: EditGro
                           </div>
                           {inviteFormHook.formState.errors.name?.message && (
                             <p className="text-[12px] text-danger">{inviteFormHook.formState.errors.name.message}</p>
+                          )}
+                        </div>
+
+                        {/* E-mail */}
+                        <div className="flex flex-col gap-[8px]">
+                          <p className="text-[16px] leading-[1.4] text-[#F5F7FA]">E-mail do convidado</p>
+                          <div className="flex items-center h-[48px] bg-[#1C1D25] rounded-[8px] px-[16px]">
+                            <input
+                              type="email"
+                              className="flex-1 bg-transparent text-[16px] leading-[1.4] text-[#F5F7FA] outline-none placeholder:text-[#7C8394]"
+                              placeholder="E-mail do convidado"
+                              {...inviteFormHook.register('email')}
+                            />
+                          </div>
+                          {inviteFormHook.formState.errors.email?.message && (
+                            <p className="text-[12px] text-danger">{inviteFormHook.formState.errors.email.message}</p>
                           )}
                         </div>
 
@@ -457,6 +527,61 @@ export default function EditGroupBottomSheet({ open, onClose, groupId }: EditGro
           <Button variant="danger" onClick={handleRemoveMember}>
             Remover
           </Button>
+        </div>
+      </ModalWithToast>
+
+      <ModalWithToast
+        open={!!editingInviteMember}
+        onClose={handleCloseInviteEmailEditor}
+        title="Editar e-mail do convite"
+        toasts={toasts}
+      >
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-2">
+            <p className="text-body-sm text-text-secondary">
+              Depois de salvar, compartilhe novamente o link do grupo com o convidado.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-[8px]">
+            <p className="text-[16px] leading-[1.4] text-[#F5F7FA]">E-mail do convidado</p>
+            <div className="flex items-center h-[48px] bg-[#1C1D25] rounded-[8px] px-[16px]">
+              <input
+                type="email"
+                className="flex-1 bg-transparent text-[16px] leading-[1.4] text-[#F5F7FA] outline-none placeholder:text-[#7C8394]"
+                placeholder="E-mail do convidado"
+                {...editInviteEmailForm.register('email')}
+              />
+            </div>
+            {editInviteEmailForm.formState.errors.email?.message && (
+              <p className="text-[12px] text-danger">{editInviteEmailForm.formState.errors.email.message}</p>
+            )}
+            {editingInviteError && (
+              <p className="text-[12px] text-danger">{editingInviteError}</p>
+            )}
+          </div>
+
+          <div className="flex gap-[16px]">
+            <button
+              type="button"
+              onClick={handleCloseInviteEmailEditor}
+              className="flex h-[48px] flex-1 items-center justify-center rounded-[8px] bg-[#1C1D25] text-[16px] font-medium leading-[1.4] text-[#F5F7FA]"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={editInviteEmailForm.handleSubmit(handleSaveInviteEmail)}
+              disabled={editingInviteSaving}
+              className="flex h-[48px] flex-1 items-center justify-center rounded-[8px] bg-[#F5C249] text-[16px] font-medium leading-[1.4] text-[#101116] disabled:opacity-40"
+            >
+              {editingInviteSaving ? (
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#101116] border-t-transparent" />
+              ) : (
+                'Salvar e-mail'
+              )}
+            </button>
+          </div>
         </div>
       </ModalWithToast>
     </>

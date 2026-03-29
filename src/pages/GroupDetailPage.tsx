@@ -1481,6 +1481,7 @@ export default function GroupDetailPage() {
           loadGroup()
         }}
         groupId={groupId!}
+        initialGroup={group}
       />
     </div>
   )
