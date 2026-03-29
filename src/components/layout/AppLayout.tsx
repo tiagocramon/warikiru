@@ -3,7 +3,7 @@ import { Navigate, Outlet, Link, useOutletContext } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import Spinner from '../ui/Spinner'
 import ProfileBottomSheet from '../../pages/ProfilePage'
-import { UserPen, Bell, X } from 'lucide-react'
+import { UserPen } from 'lucide-react'
 import logoHeader from '../../assets/logo-header.svg'
 import { isPushSupported, subscribeToPush, isSubscribed } from '../../services/pushNotificationService'
 
@@ -15,39 +15,22 @@ export function useAppLayout() {
   return useOutletContext<AppLayoutContext>()
 }
 
-const PUSH_DISMISSED_KEY = 'warikiru_push_dismissed'
-
 export default function AppLayout() {
   const { user, loading, refreshUser } = useAuth()
   const [profileOpen, setProfileOpen] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
-  const [showPushBanner, setShowPushBanner] = useState(false)
 
+  // Auto-subscribe to push notifications on login
   useEffect(() => {
     if (!user) return
-    const dismissed = localStorage.getItem(PUSH_DISMISSED_KEY)
-    if (dismissed) return
     if (!isPushSupported()) return
 
     isSubscribed().then((subscribed) => {
       if (!subscribed && Notification.permission !== 'denied') {
-        setShowPushBanner(true)
+        subscribeToPush()
       }
     })
   }, [user])
-
-  async function handleEnablePush() {
-    const { error } = await subscribeToPush()
-    if (error) {
-      console.error('Erro ao ativar notificações:', error)
-    }
-    setShowPushBanner(false)
-  }
-
-  function handleDismissPush() {
-    localStorage.setItem(PUSH_DISMISSED_KEY, '1')
-    setShowPushBanner(false)
-  }
 
   async function handleProfileSuccess() {
     await refreshUser()
@@ -84,30 +67,6 @@ export default function AppLayout() {
           </button>
         </div>
       </header>
-
-      {showPushBanner && (
-        <div className="border-b border-[#16171D] bg-[#16171D] px-5 py-3">
-          <div className="mx-auto flex w-full sm:max-w-[900px] items-center gap-3">
-            <Bell size={18} className="shrink-0 text-accent" />
-            <p className="min-w-0 flex-1 text-[13px] text-text-secondary">
-              Ative notificações para saber quando adicionarem despesas ao seu grupo.
-            </p>
-            <button
-              onClick={handleEnablePush}
-              className="shrink-0 rounded-full bg-accent px-3 py-1.5 text-[11px] font-medium text-surface-0"
-            >
-              Ativar
-            </button>
-            <button
-              onClick={handleDismissPush}
-              className="shrink-0 text-text-tertiary hover:text-text-secondary"
-              aria-label="Dispensar"
-            >
-              <X size={16} />
-            </button>
-          </div>
-        </div>
-      )}
 
       <div className="mx-auto flex flex-1 w-full max-w-[900px] flex-col bg-[#101116]">
         <main className="flex flex-1 flex-col overflow-x-hidden">

@@ -10,7 +10,8 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { profileNameSchema, type ProfileNameForm } from '../lib/schemas'
 import { useLocalToast } from '../hooks/useLocalToast'
 import FloatingToast from '../components/ui/FloatingToast'
-import { LogOut, Users, Calendar, Mail, Pencil, X } from 'lucide-react'
+import { LogOut, Users, Calendar, Mail, Pencil, X, Bell } from 'lucide-react'
+import { isPushSupported, isSubscribed, subscribeToPush, unsubscribeFromPush } from '../services/pushNotificationService'
 
 interface ProfileBottomSheetProps {
   open: boolean
@@ -25,6 +26,9 @@ export default function ProfileBottomSheet({ open, onClose, onSuccess }: Profile
   const [groupsCount, setGroupsCount] = useState<number | null>(null)
   const [editingName, setEditingName] = useState(false)
   const [, setSavingName] = useState(false)
+  const [pushEnabled, setPushEnabled] = useState(false)
+  const [pushLoading, setPushLoading] = useState(false)
+  const [pushSupported, setPushSupported] = useState(false)
 
   const {
     register,
@@ -46,6 +50,11 @@ export default function ProfileBottomSheet({ open, onClose, onSuccess }: Profile
       fetchUserGroups().then(({ data }) => {
         setGroupsCount(data?.length ?? 0)
       })
+      const supported = isPushSupported()
+      setPushSupported(supported)
+      if (supported) {
+        isSubscribed().then(setPushEnabled)
+      }
     }
   }, [open])
 
@@ -93,6 +102,18 @@ export default function ProfileBottomSheet({ open, onClose, onSuccess }: Profile
       onSuccess?.()
       showToast('Salvo com sucesso!', 'success')
     }
+  }
+
+  async function handleTogglePush() {
+    setPushLoading(true)
+    if (pushEnabled) {
+      await unsubscribeFromPush()
+      setPushEnabled(false)
+    } else {
+      const { error } = await subscribeToPush()
+      if (!error) setPushEnabled(true)
+    }
+    setPushLoading(false)
   }
 
   async function handleSignOut() {
@@ -216,6 +237,34 @@ export default function ProfileBottomSheet({ open, onClose, onSuccess }: Profile
                     <span className="text-[14px] text-[#F5F7FA]">{createdAt}</span>
                   </div>
                 </div>
+
+                {/* Notificações */}
+                {pushSupported && (
+                  <div className="flex items-center gap-[8px] rounded-[8px] bg-[#1C1D25] p-[20px]">
+                    <div className="flex h-[40px] w-[40px] items-center justify-center rounded-full bg-[rgba(245,194,73,0.16)]">
+                      <Bell size={16} className="text-[#F5C249]" />
+                    </div>
+                    <div className="flex flex-1 flex-col leading-[1.4]">
+                      <span className="text-[12px] text-[#7C8394]">Notificações</span>
+                      <span className="text-[14px] text-[#F5F7FA]">
+                        {pushEnabled ? 'Ativadas' : 'Desativadas'}
+                      </span>
+                    </div>
+                    <button
+                      onClick={handleTogglePush}
+                      disabled={pushLoading}
+                      className={`relative h-[28px] w-[48px] shrink-0 rounded-full transition-colors ${
+                        pushEnabled ? 'bg-[#F5C249]' : 'bg-[#3A3C48]'
+                      } ${pushLoading ? 'opacity-50' : ''}`}
+                    >
+                      <div
+                        className={`absolute top-[3px] h-[22px] w-[22px] rounded-full bg-white transition-transform ${
+                          pushEnabled ? 'translate-x-[23px]' : 'translate-x-[3px]'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Sair da Conta */}
