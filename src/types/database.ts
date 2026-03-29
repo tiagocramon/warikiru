@@ -90,6 +90,22 @@ export interface AuditLog {
   created_at: string
 }
 
+export interface RecurringExpense {
+  id: string
+  group_id: string
+  category: ExpenseCategory
+  description: string
+  amount: number
+  day_of_month: number
+  paid_by_member_id: string
+  created_by_user_id: string
+  custom_percentages: Record<string, number> | null
+  frequency: 'monthly'
+  is_active: boolean
+  last_generated_month: string | null
+  created_at: string
+}
+
 export interface GroupWithMembers extends Group {
   members: GroupMember[]
 }

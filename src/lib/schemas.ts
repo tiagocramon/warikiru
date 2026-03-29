@@ -98,6 +98,8 @@ export const expenseSchema = z
     paidByMemberId: z.string().min(1, 'Campo obrigatório.'),
     useCustomPercentages: z.boolean(),
     customPercentages: z.record(z.string(), z.number().min(0).max(100)),
+    isRecurring: z.boolean(),
+    dayOfMonth: z.number().min(1).max(31).optional(),
   })
   .superRefine((data, ctx) => {
     if (data.useCustomPercentages) {

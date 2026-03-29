@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { expenseSchema, type ExpenseForm } from '../lib/schemas'
 import { fetchGroupDetail } from '../services/groupService'
-import { fetchExpenses, createExpense } from '../services/expenseService'
+import { fetchExpenses, createExpense, createRecurringExpense } from '../services/expenseService'
 import { useLocalToast } from '../hooks/useLocalToast'
 import type { GroupMember, GroupWithMembers, ExpenseCategory } from '../types/database'
 import { EXPENSE_CATEGORIES } from '../types/database'
@@ -138,6 +138,8 @@ export default function NewExpensePage() {
       paidByMemberId: '',
       useCustomPercentages: false,
       customPercentages: {},
+      isRecurring: false,
+      dayOfMonth: new Date().getDate(),
     },
   })
 
@@ -146,6 +148,7 @@ export default function NewExpensePage() {
   const useCustomPercentages = watch('useCustomPercentages')
   const customPercentages = watch('customPercentages')
   const description = watch('description')
+  const isRecurring = watch('isRecurring')
   const date = watch('date')
 
   const calendarDays = useMemo(
@@ -274,10 +277,34 @@ export default function NewExpensePage() {
       setError('root', { message: 'Erro ao criar despesa. Tente novamente.' })
       showToast('Ops, tivemos um erro!', 'error')
       setSubmitting(false)
-    } else {
-      showToast('Despesa criada com sucesso!', 'success')
-      navigate(`/grupos/${groupId}`)
+      return
     }
+
+    if (data.isRecurring && data.dayOfMonth) {
+      const currentMonth = data.date.slice(0, 7)
+      const { error: recurringError } = await createRecurringExpense({
+        group_id: groupId!,
+        category: data.category as ExpenseCategory,
+        description: data.description,
+        amount: data.amount,
+        day_of_month: data.dayOfMonth,
+        paid_by_member_id: data.paidByMemberId,
+        custom_percentages: parsedCustom,
+        last_generated_month: currentMonth,
+      })
+      if (recurringError) {
+        console.error('Erro ao criar recorrente:', recurringError)
+        showToast('Despesa criada, mas erro ao salvar recorrência', 'error')
+        navigate(`/grupos/${groupId}`)
+        return
+      }
+    }
+
+    showToast(
+      data.isRecurring ? 'Despesa recorrente criada!' : 'Despesa criada com sucesso!',
+      'success'
+    )
+    navigate(`/grupos/${groupId}`)
   }
 
   if (loading) return <Spinner />
@@ -500,6 +527,63 @@ export default function NewExpensePage() {
                 )
               })}
             </div>
+          </div>
+
+          {/* Recurring toggle */}
+          <div className="flex flex-col gap-[12px]">
+            <button
+              type="button"
+              onClick={() => setValue('isRecurring', !isRecurring)}
+              className="flex items-center gap-[4px]"
+            >
+              <div
+                className={`relative h-[24px] w-[40px] shrink-0 rounded-full transition-colors duration-200 ${
+                  isRecurring ? 'bg-[#F5C249]' : 'bg-[#1C1D25]'
+                }`}
+              >
+                <div
+                  className={`absolute top-[2px] h-[20px] w-[20px] rounded-full transition-transform duration-200 ${
+                    isRecurring
+                      ? 'translate-x-[18px] bg-[#16171D]'
+                      : 'translate-x-[2px] bg-[#F5F7FA]'
+                  }`}
+                />
+              </div>
+              <div className="flex flex-1 flex-col text-left">
+                <span className="text-[14px] font-normal leading-[1.4] text-[#A7ADBA]">
+                  Despesa recorrente
+                </span>
+                {isRecurring && (
+                  <span className="text-[11px] text-text-tertiary">Repetir todo mês</span>
+                )}
+              </div>
+            </button>
+
+            {isRecurring && (
+              <div className="flex flex-col gap-[8px]">
+                <p className="text-[12px] text-text-tertiary">Dia do mês para repetir</p>
+                <div className="flex gap-[6px] overflow-x-auto scrollbar-hide">
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => {
+                    const selectedDay = watch('dayOfMonth') ?? new Date().getDate()
+                    const isSelected = selectedDay === day
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => setValue('dayOfMonth', day)}
+                        className={`flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-full text-[12px] font-medium transition-colors ${
+                          isSelected
+                            ? 'bg-accent-subtle text-accent'
+                            : 'bg-surface-2 text-text-tertiary'
+                        }`}
+                      >
+                        {day}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Custom percentages toggle */}

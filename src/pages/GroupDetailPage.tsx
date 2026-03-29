@@ -1,17 +1,18 @@
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import { motion, useMotionValue, useTransform, animate } from 'framer-motion'
 import { useCallback, useEffect, useRef, useState, type ElementType } from 'react'
 import { useMinLoading } from '../hooks/useMinLoading'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAppLayout } from '../components/layout/AppLayout'
 import { useAuth } from '../contexts/AuthContext'
 import { fetchGroupDetail, deleteGroup } from '../services/groupService'
-import { fetchExpenses, deleteExpense } from '../services/expenseService'
+import { fetchExpenses, deleteExpense, getPendingRecurringExpenses, generateRecurringExpense, fetchRecurringExpenses, deleteRecurringExpense } from '../services/expenseService'
 import { fetchPayments } from '../services/paymentService'
 import { fetchAuditLog } from '../services/auditService'
 import { formatCurrency } from '../lib/formatting'
 import { useLocalToast } from '../hooks/useLocalToast'
-import type { GroupWithMembers, Expense, AuditLog, Payment } from '../types/database'
+import type { GroupWithMembers, Expense, AuditLog, Payment, RecurringExpense } from '../types/database'
 import { EXPENSE_CATEGORIES } from '../types/database'
 import { calculateMonthlyBalance, calculateMemberStats } from '../lib/balance'
 import EmptyState from '../components/ui/EmptyState'
@@ -45,6 +46,9 @@ import {
   ChevronDown,
   DollarSign,
   UserPlus,
+  Search,
+  X,
+
 } from 'lucide-react'
 
 const CATEGORY_ICONS: Record<string, ElementType> = {
@@ -88,19 +92,24 @@ const RELEVANT_FIELDS: Record<string, string[]> = {
 
 type Tab = 'despesas' | 'resumo' | 'historico'
 
-interface ChartPoint {
+interface DailySpendingBar {
   day: number
   date: string
-  total: number
+  dailyTotal: number
+  cumulativeTotal: number
   x: number
   y: number
+  width: number
+  height: number
 }
 
-interface ChartModel {
-  points: ChartPoint[]
+interface DailySpendingChartModel {
+  bars: DailySpendingBar[]
   width: number
   height: number
   baselineY: number
+  monthTotal: number
+  maxDailyTotal: number
 }
 
 function getCurrentMonth(): string {
@@ -126,48 +135,72 @@ function formatShortDate(dateStr: string): string {
 }
 
 function formatChartDate(dateStr: string): string {
-  return capitalize(format(parseISO(dateStr), 'MMM dd, yyyy', { locale: ptBR }))
+  return format(parseISO(dateStr), "dd 'de' MMM", { locale: ptBR })
 }
 
 function formatPercentLabel(value: number): string {
   return Number.isInteger(value) ? `${value}%` : `${value.toFixed(1)}%`
 }
 
-function buildLinePath(points: ChartPoint[]): string {
-  if (points.length === 0) return ''
-
-  return points
-    .map((point, index) =>
-      `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`
-    )
-    .join(' ')
+function roundCurrencyValue(value: number): number {
+  return Math.round(value * 100) / 100
 }
 
-function buildAreaPath(points: ChartPoint[], baselineY: number): string {
-  if (points.length === 0) return ''
-
-  const firstPoint = points[0]
-  const lastPoint = points[points.length - 1]
-
-  return `${buildLinePath(points)} L ${lastPoint.x.toFixed(2)} ${baselineY.toFixed(
-    2
-  )} L ${firstPoint.x.toFixed(2)} ${baselineY.toFixed(2)} Z`
+function getLastExpenseDay(expenses: Expense[]): number {
+  return expenses.reduce((max, expense) => {
+    const expenseDay = parseISO(expense.date).getDate()
+    return expenseDay > max ? expenseDay : max
+  }, 0)
 }
 
-function buildMonthlyChartModel(month: string, expenses: Expense[], chartWidth: number): ChartModel {
+function getVisibleMonthDays(month: string, expenses: Expense[]): number {
   const [year, monthNumber] = month.split('-').map(Number)
   const totalDays = new Date(year, monthNumber, 0).getDate()
   const now = new Date()
   const isCurrentMonth = now.getFullYear() === year && now.getMonth() + 1 === monthNumber
-  const lastExpenseDay = expenses.reduce((max, e) => {
-    const d = parseISO(e.date).getDate()
-    return d > max ? d : max
-  }, 0)
-  const visibleDays = isCurrentMonth ? Math.min(Math.max(now.getDate(), lastExpenseDay), totalDays) : totalDays
+  const lastExpenseDay = getLastExpenseDay(expenses)
+
+  return isCurrentMonth ? Math.min(Math.max(now.getDate(), lastExpenseDay), totalDays) : totalDays
+}
+
+function getDefaultSelectedChartDay(month: string, expenses: Expense[]): number {
+  const lastExpenseDay = getLastExpenseDay(expenses)
+
+  return lastExpenseDay > 0 ? lastExpenseDay : getVisibleMonthDays(month, expenses)
+}
+
+function buildBarPath(bar: DailySpendingBar, topRadius = 4): string {
+  if (bar.height <= 0 || bar.width <= 0) return ''
+
+  const radius = Math.min(topRadius, bar.width / 2, bar.height)
+  const left = bar.x
+  const right = bar.x + bar.width
+  const top = bar.y
+  const bottom = bar.y + bar.height
+
+  return [
+    `M ${left.toFixed(2)} ${bottom.toFixed(2)}`,
+    `L ${left.toFixed(2)} ${(top + radius).toFixed(2)}`,
+    `Q ${left.toFixed(2)} ${top.toFixed(2)} ${(left + radius).toFixed(2)} ${top.toFixed(2)}`,
+    `L ${(right - radius).toFixed(2)} ${top.toFixed(2)}`,
+    `Q ${right.toFixed(2)} ${top.toFixed(2)} ${right.toFixed(2)} ${(top + radius).toFixed(2)}`,
+    `L ${right.toFixed(2)} ${bottom.toFixed(2)}`,
+    'Z',
+  ].join(' ')
+}
+
+function buildMonthlySpendingChartModel(
+  month: string,
+  expenses: Expense[],
+  chartWidth: number
+): DailySpendingChartModel {
+  const visibleDays = getVisibleMonthDays(month, expenses)
   const chartHeight = 180
-  const chartTop = 34
-  const chartBottom = 140
-  const horizontalPadding = 4
+  const chartTop = 30
+  const chartBottom = 166
+  const horizontalPadding = 6
+  const barGap = 4
+  const minimumBarHeight = 6
   const totalsByDay = Array.from({ length: visibleDays }, () => 0)
 
   expenses.forEach((expense) => {
@@ -179,36 +212,165 @@ function buildMonthlyChartModel(month: string, expenses: Expense[], chartWidth: 
 
   let runningTotal = 0
 
-  const rawPoints = totalsByDay.map((dailyTotal, index) => {
-    runningTotal += dailyTotal
+  const rawBars = totalsByDay.map((dailyTotal, index) => {
+    runningTotal = roundCurrencyValue(runningTotal + dailyTotal)
 
     return {
       day: index + 1,
       date: `${month}-${String(index + 1).padStart(2, '0')}`,
-      total: runningTotal,
+      dailyTotal: roundCurrencyValue(dailyTotal),
+      cumulativeTotal: runningTotal,
     }
   })
 
-  const maxTotal = rawPoints[rawPoints.length - 1]?.total ?? 0
+  const monthTotal = rawBars[rawBars.length - 1]?.cumulativeTotal ?? 0
+  const maxDailyTotal = rawBars.reduce(
+    (max, bar) => (bar.dailyTotal > max ? bar.dailyTotal : max),
+    0
+  )
   const innerWidth = chartWidth - horizontalPadding * 2
-  const stepX = rawPoints.length > 1 ? innerWidth / (rawPoints.length - 1) : 0
+  const slotWidth = rawBars.length > 0 ? innerWidth / rawBars.length : 0
+  const barWidth = slotWidth > 0 ? Math.max(Math.min(slotWidth - barGap, 18), 4) : 0
   const usableHeight = chartBottom - chartTop
 
-  const points = rawPoints.map((point, index) => ({
-    ...point,
-    x: horizontalPadding + stepX * index,
-    y:
-      maxTotal === 0
-        ? chartBottom
-        : chartBottom - (point.total / maxTotal) * usableHeight,
-  }))
+  const bars = rawBars.map((bar, index) => {
+    const scaledHeight =
+      maxDailyTotal === 0
+        ? minimumBarHeight
+        : bar.dailyTotal === 0
+          ? minimumBarHeight
+          : Math.max((bar.dailyTotal / maxDailyTotal) * usableHeight, 12)
+
+    return {
+      ...bar,
+      x: horizontalPadding + slotWidth * index + Math.max((slotWidth - barWidth) / 2, 0),
+      y: chartBottom - scaledHeight,
+      width: barWidth,
+      height: scaledHeight,
+    }
+  })
 
   return {
-    points,
+    bars,
     width: chartWidth,
     height: chartHeight,
-    baselineY: chartHeight,
+    baselineY: chartBottom,
+    monthTotal,
+    maxDailyTotal,
   }
+}
+
+const SWIPE_THRESHOLD = 60
+const SWIPE_ACTION_WIDTH = 160
+
+function SwipeableExpenseCard({
+  expenseId,
+  swipedExpenseId,
+  onSwipeOpen,
+  canEdit,
+  canDelete,
+  onEdit,
+  onDelete,
+  onDuplicate,
+  children,
+}: {
+  expenseId: string
+  swipedExpenseId: string | null
+  onSwipeOpen: (id: string | null) => void
+  canEdit: boolean
+  canDelete: boolean
+  onEdit: () => void
+  onDelete: () => void
+  onDuplicate: () => void
+  children: React.ReactNode
+}) {
+  const x = useMotionValue(0)
+  const isOpen = swipedExpenseId === expenseId
+  const actionsOpacity = useTransform(x, [-SWIPE_ACTION_WIDTH, -30, 0], [1, 0.5, 0])
+  const fadeOpacity = useTransform(x, [-SWIPE_ACTION_WIDTH, -20, 0], [0.85, 0.3, 0])
+
+  useEffect(() => {
+    if (!isOpen) {
+      animate(x, 0, { type: 'spring', stiffness: 400, damping: 30 })
+    }
+  }, [isOpen, x])
+
+  function handleDragEnd(_: unknown, info: { offset: { x: number }; velocity: { x: number } }) {
+    const shouldOpen = info.offset.x < -SWIPE_THRESHOLD || info.velocity.x < -500
+
+    if (shouldOpen) {
+      animate(x, -SWIPE_ACTION_WIDTH, { type: 'spring', stiffness: 400, damping: 30 })
+      onSwipeOpen(expenseId)
+    } else {
+      animate(x, 0, { type: 'spring', stiffness: 400, damping: 30 })
+      onSwipeOpen(null)
+    }
+  }
+
+  function handleTap() {
+    if (isOpen) {
+      onSwipeOpen(null)
+    }
+  }
+
+  return (
+    <div className="relative overflow-hidden rounded-[8px]">
+      <motion.div
+        className="absolute right-0 top-0 bottom-0 flex items-stretch"
+        style={{ width: SWIPE_ACTION_WIDTH, opacity: actionsOpacity }}
+      >
+        <button
+          onClick={onDuplicate}
+          className="flex flex-1 flex-col items-center justify-center gap-1 text-text-tertiary transition-colors hover:text-text-secondary"
+          aria-label="Repetir despesa"
+        >
+          <Copy size={18} />
+          <span className="text-[10px] font-medium">Repetir</span>
+        </button>
+        {canEdit && (
+          <button
+            onClick={onEdit}
+            className="flex flex-1 flex-col items-center justify-center gap-1 text-text-tertiary transition-colors hover:text-text-secondary"
+            aria-label="Editar despesa"
+          >
+            <Pencil size={18} />
+            <span className="text-[10px] font-medium">Editar</span>
+          </button>
+        )}
+        {canDelete && (
+          <button
+            onClick={onDelete}
+            className="flex flex-1 flex-col items-center justify-center gap-1 text-text-tertiary transition-colors hover:text-text-secondary"
+            aria-label="Excluir despesa"
+          >
+            <Trash2 size={18} />
+            <span className="text-[10px] font-medium">Excluir</span>
+          </button>
+        )}
+      </motion.div>
+
+      <motion.div
+        className="relative flex flex-col gap-3 rounded-[8px] bg-surface-2 p-5"
+        style={{ x }}
+        drag="x"
+        dragDirectionLock
+        dragConstraints={{ left: -SWIPE_ACTION_WIDTH, right: 0 }}
+        dragElastic={0.1}
+        onDragEnd={handleDragEnd}
+        onTap={handleTap}
+      >
+        {children}
+
+        <motion.div
+          className="pointer-events-none absolute inset-0 rounded-[8px]"
+          style={{
+            opacity: fadeOpacity,
+            background: 'linear-gradient(to right, transparent 40%, var(--surface-01) 100%)',
+          }}
+        />
+      </motion.div>
+    </div>
+  )
 }
 
 export default function GroupDetailPage() {
@@ -260,25 +422,39 @@ export default function GroupDetailPage() {
   const [expandedAuditId, setExpandedAuditId] = useState<string | null>(null)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [deleteExpenseId, setDeleteExpenseId] = useState<string | null>(null)
+  const [swipedExpenseId, setSwipedExpenseId] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [filterCategory, setFilterCategory] = useState<string | null>(null)
+  const [filterPayer, setFilterPayer] = useState<string | null>(null)
+  const [pendingRecurring, setPendingRecurring] = useState<RecurringExpense[]>([])
+  const [allRecurring, setAllRecurring] = useState<RecurringExpense[]>([])
+  const [generatingId, setGeneratingId] = useState<string | null>(null)
   const [editOpen, setEditOpen] = useState(false)
 
   const isOwner = group?.owner_id === user?.id
 
-  const monthExpenses = expenses.filter((expense) => expense.date.startsWith(selectedMonth))
-  const monthPayments = payments.filter((payment) =>
-    payment.reference_month.startsWith(selectedMonth)
-  )
+  const monthExpenses = expenses
+  const monthPayments = payments
   const totalExpensesMonth = monthExpenses.reduce((sum, expense) => sum + expense.amount, 0)
-  const chartModel = buildMonthlyChartModel(selectedMonth, monthExpenses, chartWidth)
-  const selectedChartPoint =
+
+  const hasActiveFilters = searchQuery !== '' || filterCategory !== null || filterPayer !== null
+  const filteredExpenses = monthExpenses.filter((expense) => {
+    if (searchQuery && !expense.description.toLowerCase().includes(searchQuery.toLowerCase())) return false
+    if (filterCategory && expense.category !== filterCategory) return false
+    if (filterPayer && expense.paid_by_member_id !== filterPayer) return false
+    return true
+  })
+  const chartModel = buildMonthlySpendingChartModel(selectedMonth, monthExpenses, chartWidth)
+  const lastExpenseBar =
+    [...chartModel.bars].reverse().find((bar) => bar.dailyTotal > 0) ??
+    chartModel.bars[chartModel.bars.length - 1] ??
+    null
+  const selectedChartBar =
     selectedChartDay == null
-      ? null
-      : chartModel.points.find((point) => point.day === selectedChartDay) ?? null
-  const selectedChartIndex = selectedChartPoint
-    ? chartModel.points.findIndex((point) => point.day === selectedChartPoint.day)
-    : -1
-  const activeChartPoints =
-    selectedChartIndex >= 0 ? chartModel.points.slice(0, selectedChartIndex + 1) : []
+      ? lastExpenseBar
+      : chartModel.bars.find((bar) => bar.day === selectedChartDay) ??
+        lastExpenseBar ??
+        null
   const loadGroup = useCallback(async () => {
     if (!groupId) return
     const { data } = await fetchGroupDetail(groupId)
@@ -290,6 +466,20 @@ export default function GroupDetailPage() {
     const { data } = await fetchExpenses(groupId, selectedMonth)
     setExpenses(data ?? [])
   }, [groupId, selectedMonth])
+
+  const loadPendingRecurring = useCallback(async () => {
+    if (!groupId) return
+    const { pending, error } = await getPendingRecurringExpenses(groupId, selectedMonth)
+    if (error) console.error('Erro ao buscar recorrentes pendentes:', error)
+    setPendingRecurring(pending)
+  }, [groupId, selectedMonth])
+
+  const loadAllRecurring = useCallback(async () => {
+    if (!groupId) return
+    const { data, error } = await fetchRecurringExpenses(groupId)
+    if (error) console.error('Erro ao buscar recorrentes:', error)
+    setAllRecurring(data ?? [])
+  }, [groupId])
 
   const loadPayments = useCallback(async () => {
     if (!groupId) return
@@ -320,14 +510,14 @@ export default function GroupDetailPage() {
   useEffect(() => {
     let active = true
 
-    Promise.all([loadGroup(), loadExpenses(), loadPayments(), loadAuditLogs()]).then(() => {
+    Promise.all([loadGroup(), loadExpenses(), loadPayments(), loadAuditLogs(), loadPendingRecurring(), loadAllRecurring()]).then(() => {
       if (active) doneLoading()
     })
 
     return () => {
       active = false
     }
-  }, [loadGroup, loadExpenses, loadPayments, loadAuditLogs, refreshKey])
+  }, [loadGroup, loadExpenses, loadPayments, loadAuditLogs, loadPendingRecurring, loadAllRecurring, refreshKey, doneLoading])
 
   useEffect(() => {
     const sentinel = auditSentinelRef.current
@@ -347,17 +537,17 @@ export default function GroupDetailPage() {
   }, [activeTab, loadMoreAuditLogs])
 
   useEffect(() => {
-    const now = new Date()
-    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-    if (selectedMonth === currentMonth) {
-      setSelectedChartDay(now.getDate())
-    } else {
-      // For past/future months, select last day of that month
-      const [y, m] = selectedMonth.split('-').map(Number)
-      const lastDay = new Date(y, m, 0).getDate()
-      setSelectedChartDay(lastDay)
-    }
-  }, [selectedMonth])
+    const defaultDay = getDefaultSelectedChartDay(selectedMonth, expenses)
+    const visibleDays = getVisibleMonthDays(selectedMonth, expenses)
+
+    setSelectedChartDay((currentDay) => {
+      if (currentDay != null && currentDay >= 1 && currentDay <= visibleDays) {
+        return currentDay
+      }
+
+      return defaultDay
+    })
+  }, [selectedMonth, expenses])
 
   useEffect(() => {
     if (expandedExpenseId && !monthExpenses.some((expense) => expense.id === expandedExpenseId)) {
@@ -434,12 +624,42 @@ export default function GroupDetailPage() {
     }, 500)
   }
 
+  async function handleDeleteRecurring(recurringId: string) {
+    const { error } = await deleteRecurringExpense(recurringId)
+    if (error) {
+      showToast('Erro ao desativar', 'error')
+    } else {
+      showToast('Recorrente desativada', 'success')
+      setAllRecurring((prev) => prev.filter((r) => r.id !== recurringId))
+      setPendingRecurring((prev) => prev.filter((r) => r.id !== recurringId))
+    }
+  }
+
+  async function handleGenerateRecurring(recurring: RecurringExpense) {
+    setGeneratingId(recurring.id)
+    const { error } = await generateRecurringExpense(recurring, selectedMonth)
+    setGeneratingId(null)
+
+    if (error) {
+      console.error('Erro ao gerar recorrente:', error)
+      showToast('Erro ao gerar despesa', 'error')
+    } else {
+      showToast('Despesa gerada!', 'success')
+      setPendingRecurring((prev) => prev.filter((r) => r.id !== recurring.id))
+      loadExpenses()
+      loadAuditLogs()
+    }
+  }
+
   function handleMonthChange(delta: number) {
     const [year, monthNumber] = selectedMonth.split('-').map(Number)
     const nextDate = new Date(year, monthNumber - 1 + delta, 1)
 
     setExpandedExpenseId(null)
     setSelectedChartDay(null)
+    setSearchQuery('')
+    setFilterCategory(null)
+    setFilterPayer(null)
     setSelectedMonth(
       `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`
     )
@@ -450,14 +670,23 @@ export default function GroupDetailPage() {
   }
 
   function handleChartSelection(clientX: number) {
-    if (!chartRef.current || chartModel.points.length === 0) return
+    if (!chartRef.current || chartModel.bars.length === 0) return
 
     const rect = chartRef.current.getBoundingClientRect()
     const relativeX = clamp(clientX - rect.left, 0, rect.width)
-    const pointIndex = Math.round((relativeX / rect.width) * (chartModel.points.length - 1))
-    const nextPoint = chartModel.points[pointIndex]
+    const chartX = (relativeX / rect.width) * chartModel.width
+    const nextBar = chartModel.bars.reduce((closestBar, bar) => {
+      if (!closestBar) return bar
 
-    if (nextPoint) setSelectedChartDay(nextPoint.day)
+      const closestCenter = closestBar.x + closestBar.width / 2
+      const currentCenter = bar.x + bar.width / 2
+
+      return Math.abs(currentCenter - chartX) < Math.abs(closestCenter - chartX)
+        ? bar
+        : closestBar
+    }, chartModel.bars[0])
+
+    if (nextBar) setSelectedChartDay(nextBar.day)
   }
 
   function translateAction(action: string, entityType: string): string {
@@ -500,6 +729,9 @@ export default function GroupDetailPage() {
   const balances = calculateMonthlyBalance(monthExpenses, group.members, monthPayments)
   const memberStats = calculateMemberStats(monthExpenses, group.members, monthPayments)
   const sortedCategories = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])
+  const monthExpenseCountLabel = `${monthExpenses.length} ${
+    monthExpenses.length === 1 ? 'despesa lançada' : 'despesas lançadas'
+  }`
   const memberCountLabel = `${group.members.length} ${
     group.members.length === 1 ? 'membro' : 'membros'
   }`
@@ -562,12 +794,9 @@ export default function GroupDetailPage() {
               <ChevronLeft size={18} />
             </button>
 
-            <div className="flex min-w-0 flex-1 items-center gap-3">
-              <p className="min-w-0 flex-1 truncate text-body font-medium text-text-primary">
+            <div className="flex min-w-0 flex-1 items-center justify-center">
+              <p className="truncate text-center text-body font-medium text-text-primary">
                 {formatMonthHeading(`${selectedMonth}-01`)}
-              </p>
-              <p className="shrink-0 text-body font-bold text-accent">
-                {formatCurrency(selectedChartPoint ? selectedChartPoint.total : totalExpensesMonth)}
               </p>
             </div>
 
@@ -580,123 +809,54 @@ export default function GroupDetailPage() {
             </button>
           </div>
 
-          {balances.length > 0 ? (
-            <div className="flex flex-col gap-[8px]">
-              {balances.map((balance, index) => (
-                <div key={index} className="rounded-[8px] bg-surface-1 p-[20px]">
-                  <div className="flex gap-[8px] items-center">
-                    <div className="flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-full bg-[rgba(232,93,93,0.16)]">
-                      <DollarSign size={16} className="text-[#E85D5D]" />
-                    </div>
-                    <div className="flex min-w-0 flex-1 flex-col leading-[1.4]">
-                      <p className="text-[14px] font-normal text-[#A7ADBA]">
-                        {getMemberNameById(balance.from_member_id)} deve pagar para {getMemberNameById(balance.to_member_id)}
-                      </p>
-                      <p className="text-[16px] font-bold text-[#E85D5D]">
-                        {formatCurrency(balance.amount)}
-                      </p>
-                    </div>
+          {monthExpenses.length > 0 ? (
+            <>
+              <div className="rounded-[8px] bg-surface-1 p-[20px]">
+                <div className="flex gap-[8px] items-center">
+                  <div className="flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-full bg-[rgba(245,194,73,0.16)]">
+                    <Receipt size={16} className="text-[#F5C249]" />
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-col leading-[1.4]">
+                    <p className="text-[14px] font-normal text-[#A7ADBA]">
+                      Total lançado no mês ({monthExpenseCountLabel})
+                    </p>
+                    <p className="text-[16px] font-bold text-text-primary">
+                      {formatCurrency(totalExpensesMonth)}
+                    </p>
                   </div>
                 </div>
-              ))}
-            </div>
-          ) : memberStats.some((stat) => stat.total_share > 0) ? (
-            <div className="rounded-[8px] bg-surface-1 p-[20px]">
-              <p className="text-[16px] leading-[1.4] text-[#4CAF50]">As contas estao quitadas.</p>
-            </div>
-          ) : null}
+              </div>
 
-          {monthExpenses.length > 0 ? (
-            <div
-              ref={chartRefCallback}
-              className="relative h-[180px] cursor-pointer touch-pan-y"
-              onPointerDown={(event) => handleChartSelection(event.clientX)}
-              onPointerMove={(event) => {
-                if (event.pointerType === 'mouse' || event.buttons === 1) {
-                  handleChartSelection(event.clientX)
-                }
-              }}
-            >
-              {selectedChartPoint ? (
-                <div
-                  className="pointer-events-none absolute top-0 z-10 whitespace-nowrap text-[10px] text-text-tertiary"
-                  style={{
-                    left: selectedChartPoint.x <= chartModel.width / 2
-                      ? `${(selectedChartPoint.x / chartModel.width) * 100}%`
-                      : undefined,
-                    right: selectedChartPoint.x > chartModel.width / 2
-                      ? `${((chartModel.width - selectedChartPoint.x) / chartModel.width) * 100}%`
-                      : undefined,
-                    paddingLeft: selectedChartPoint.x <= chartModel.width / 2 ? 8 : undefined,
-                    paddingRight: selectedChartPoint.x > chartModel.width / 2 ? 8 : undefined,
-                  }}
-                >
-                  {formatChartDate(selectedChartPoint.date)}
+              {balances.length > 0 ? (
+                <div className="flex flex-col gap-[8px]">
+                  {balances.map((balance, index) => (
+                    <div key={index} className="rounded-[8px] bg-surface-1 p-[20px]">
+                      <div className="flex gap-[8px] items-center">
+                        <div className="flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-full bg-[rgba(232,93,93,0.16)]">
+                          <DollarSign size={16} className="text-[#E85D5D]" />
+                        </div>
+                        <div className="flex min-w-0 flex-1 flex-col leading-[1.4]">
+                          <p className="text-[14px] font-normal text-[#A7ADBA]">
+                            {getMemberNameById(balance.from_member_id)} deve pagar para {getMemberNameById(balance.to_member_id)}
+                          </p>
+                          <p className="text-[16px] font-bold text-[#E85D5D]">
+                            {formatCurrency(balance.amount)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ) : null}
-
-              <svg
-                viewBox={`0 0 ${chartModel.width} ${chartModel.height}`}
-                className="h-full w-full overflow-visible"
-                aria-hidden="true"
-              >
-                <defs>
-                  <linearGradient id="month-chart-fill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="rgba(245, 194, 73, 0.2)" />
-                    <stop offset="100%" stopColor="rgba(245, 194, 73, 0)" />
-                  </linearGradient>
-                </defs>
-
-                <path
-                  d={buildLinePath(chartModel.points)}
-                  fill="none"
-                  stroke="rgba(124, 131, 148, 0.18)"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-
-                {chartModel.points.length > 0 ? (
-                  <path d={buildAreaPath(chartModel.points, chartModel.baselineY)} fill="url(#month-chart-fill)" />
-                ) : null}
-
-                {activeChartPoints.length > 0 ? (
-                  <path
-                    d={buildLinePath(activeChartPoints)}
-                    fill="none"
-                    stroke="#F5C249"
-                    strokeWidth="2.25"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                ) : null}
-
-                {selectedChartPoint ? (
-                  <>
-                    <line
-                      x1={selectedChartPoint.x}
-                      y1="0"
-                      x2={selectedChartPoint.x}
-                      y2={chartModel.height}
-                      stroke="rgba(124, 131, 148, 0.22)"
-                      strokeWidth="1"
-                    />
-                    <circle
-                      cx={selectedChartPoint.x}
-                      cy={selectedChartPoint.y}
-                      r="4.5"
-                      fill="#F5C249"
-                    />
-                    <circle
-                      cx={selectedChartPoint.x}
-                      cy={selectedChartPoint.y}
-                      r="7.5"
-                      fill="rgba(245, 194, 73, 0.18)"
-                    />
-                  </>
-                ) : null}
-              </svg>
-            </div>
+              ) : (
+                <div className="rounded-[8px] bg-surface-1 p-[20px]">
+                  <p className="text-[16px] leading-[1.4] text-[#4CAF50]">
+                    {memberStats.some((stat) => stat.total_share > 0)
+                      ? 'As contas estao quitadas.'
+                      : 'Nenhuma pendência de acerto neste mês.'}
+                  </p>
+                </div>
+              )}
+            </>
           ) : null}
         </div>
       </section>
@@ -723,134 +883,234 @@ export default function GroupDetailPage() {
 
         <div className="flex flex-1 flex-col px-5 pt-5">
           {activeTab === 'despesas' ? (
-            monthExpenses.length === 0 ? (
+            <>
+              {pendingRecurring.length > 0 && (
+                <div className="mb-3 space-y-2">
+                  <p className="text-[12px] font-medium text-accent">Despesas recorrentes pendentes</p>
+                  {pendingRecurring.map((recurring) => {
+                    const RecurringIcon = CATEGORY_ICONS[recurring.category] || MoreHorizontal
+                    const isGenerating = generatingId === recurring.id
+
+                    return (
+                      <div
+                        key={recurring.id}
+                        className="flex items-center gap-3 rounded-[8px] border border-dashed border-[rgba(245,194,73,0.16)] p-4"
+                      >
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/20 text-accent">
+                          <RecurringIcon size={14} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[13px] text-text-primary">{recurring.description}</p>
+                          <p className="text-[11px] text-text-tertiary">
+                            {formatCurrency(recurring.amount)} · dia {recurring.day_of_month}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleGenerateRecurring(recurring)}
+                          disabled={isGenerating}
+                          className="flex h-8 items-center gap-1.5 rounded-full bg-accent/20 px-3 text-[11px] font-medium text-accent transition-colors hover:bg-accent/30 disabled:opacity-50"
+                        >
+                          {isGenerating ? (
+                            <div className="h-3 w-3 animate-spin rounded-full border-[1.5px] border-accent border-t-transparent" />
+                          ) : (
+                            'Gerar'
+                          )}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+              {monthExpenses.length === 0 && pendingRecurring.length === 0 ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-2 py-16">
                 <Receipt size={40} className="text-text-tertiary" />
                 <p className="text-[14px] font-medium leading-[1.4] text-text-tertiary">
                   Nenhuma despesa neste mês
                 </p>
               </div>
-            ) : (
-              <div className="space-y-3">
-                {monthExpenses.map((expense) => {
-                  const payerName = getMemberNameById(expense.paid_by_member_id)
-                  const category = EXPENSE_CATEGORIES.find((entry) => entry.value === expense.category)
-                  const CategoryIcon = CATEGORY_ICONS[expense.category] || MoreHorizontal
-                  const splitPercentages =
-                    expense.custom_percentages ??
-                    Object.fromEntries(group.members.map((member) => [member.id, member.percentage]))
-                  const shares = Object.entries(splitPercentages).map(([memberId, percentage]) => ({
-                    memberId,
-                    amount: expense.amount * (Number(percentage) / 100),
-                    percentage: Number(percentage),
-                  }))
-                  const isExpanded = expandedExpenseId === expense.id
-                  const canEdit = expense.created_by_user_id === user?.id
-                  const canDelete = expense.created_by_user_id === user?.id || isOwner
+            ) : monthExpenses.length === 0 ? null : (
+              <div className="flex flex-1 flex-col gap-3">
+                {/* Search & Filters */}
+                <div className="space-y-3">
+                  <div className="relative">
+                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+                    <input
+                      type="text"
+                      placeholder="Buscar despesa..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="h-10 w-full rounded-[8px] bg-surface-2 pl-9 pr-9 text-[13px] text-text-primary placeholder:text-text-tertiary outline-none"
+                    />
+                    {searchQuery && (
+                      <button
+                        onClick={() => setSearchQuery('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-secondary"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
 
-                  return (
-                    <div key={expense.id} className="flex flex-col gap-3 rounded-[8px] bg-surface-2 p-5">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent-subtle text-accent">
-                          <CategoryIcon size={16} />
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-[14px] text-text-primary">{expense.description}</p>
-                          <p className="text-[16px] font-bold text-text-primary">{formatCurrency(expense.amount)}</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex h-6 items-center rounded-full bg-accent-subtle px-5 text-[12px] font-medium text-accent">
-                          {category?.label ?? expense.category}
-                        </span>
-                        <p className="min-w-0 flex-1 truncate text-[12px] text-text-tertiary">
-                          {payerName} pagou em {formatShortDate(expense.date)}
-                        </p>
-                      </div>
-
-                      <div className="rounded-[4px] bg-[rgba(255,255,255,0.04)]">
+                  <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+                    {EXPENSE_CATEGORIES.map((cat) => {
+                      const Icon = CATEGORY_ICONS[cat.value] || MoreHorizontal
+                      const isActive = filterCategory === cat.value
+                      return (
                         <button
-                          onClick={() => handleExpenseToggle(expense.id)}
-                          className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                          key={cat.value}
+                          onClick={() => setFilterCategory(isActive ? null : cat.value)}
+                          className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                            isActive
+                              ? 'bg-accent-subtle text-accent'
+                              : 'bg-surface-2 text-text-tertiary hover:text-text-secondary'
+                          }`}
                         >
-                          <span className="text-[12px] font-medium text-accent">Ver divisao</span>
-                          <ChevronDown
-                            size={16}
-                            className={`text-accent transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
-                          />
+                          <Icon size={12} />
+                          {cat.label}
                         </button>
+                      )
+                    })}
+                  </div>
 
-                        <div
-                          className="grid transition-[grid-template-rows] duration-200 ease-out"
-                          style={{ gridTemplateRows: isExpanded ? '1fr' : '0fr' }}
-                        >
-                          <div className="overflow-hidden">
-                            <div className="space-y-2 px-4 pb-3">
-                              {shares.map((share) => {
-                                const isPayer = share.memberId === expense.paid_by_member_id
+                  {group.members.length > 2 && (
+                    <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+                      {group.members.map((member) => {
+                        const isActive = filterPayer === member.id
+                        return (
+                          <button
+                            key={member.id}
+                            onClick={() => setFilterPayer(isActive ? null : member.id)}
+                            className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                              isActive
+                                ? 'bg-accent-subtle text-accent'
+                                : 'bg-surface-2 text-text-tertiary hover:text-text-secondary'
+                            }`}
+                          >
+                            {member.name}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
 
-                                return (
-                                  <div key={share.memberId} className="flex items-center justify-between gap-3 text-[12px]">
-                                    <span className="min-w-0 flex-1 truncate text-text-secondary">
-                                      {getMemberNameById(share.memberId)} ({formatPercentLabel(share.percentage)})
-                                    </span>
-                                    <span className={isPayer ? 'text-success' : 'text-danger'}>
-                                      {isPayer ? `pagou ${formatCurrency(share.amount)}` : `deve ${formatCurrency(share.amount)}`}
-                                    </span>
-                                  </div>
-                                )
-                              })}
+                  {hasActiveFilters && (
+                    <div className="flex items-center justify-between">
+                      <p className="text-[12px] text-text-tertiary">
+                        {filteredExpenses.length} de {monthExpenses.length} despesas
+                      </p>
+                      <button
+                        onClick={() => {
+                          setSearchQuery('')
+                          setFilterCategory(null)
+                          setFilterPayer(null)
+                        }}
+                        className="text-[12px] font-medium text-accent"
+                      >
+                        Limpar filtros
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {filteredExpenses.length === 0 && hasActiveFilters ? (
+                  <div className="flex flex-1 flex-col items-center justify-center gap-2">
+                    <Search size={32} className="text-text-tertiary" />
+                    <p className="text-[14px] font-medium text-text-tertiary">
+                      Nenhuma despesa encontrada
+                    </p>
+                  </div>
+                ) : (
+                  filteredExpenses.map((expense) => {
+                    const payerName = getMemberNameById(expense.paid_by_member_id)
+                    const category = EXPENSE_CATEGORIES.find((entry) => entry.value === expense.category)
+                    const CategoryIcon = CATEGORY_ICONS[expense.category] || MoreHorizontal
+                    const splitPercentages =
+                      expense.custom_percentages ??
+                      Object.fromEntries(group.members.map((member) => [member.id, member.percentage]))
+                    const shares = Object.entries(splitPercentages).map(([memberId, percentage]) => ({
+                      memberId,
+                      amount: expense.amount * (Number(percentage) / 100),
+                      percentage: Number(percentage),
+                    }))
+                    const isExpanded = expandedExpenseId === expense.id
+                    const canEdit = expense.created_by_user_id === user?.id
+                    const canDelete = expense.created_by_user_id === user?.id || isOwner
+
+                    return (
+                      <SwipeableExpenseCard
+                        key={expense.id}
+                        expenseId={expense.id}
+                        swipedExpenseId={swipedExpenseId}
+                        onSwipeOpen={setSwipedExpenseId}
+                        canEdit={canEdit}
+                        canDelete={canDelete}
+                        onEdit={() => navigate(`/grupos/${groupId}/despesas/${expense.id}/editar`)}
+                        onDelete={() => setDeleteExpenseId(expense.id)}
+                        onDuplicate={() => navigate(`/grupos/${groupId}/despesas/nova?duplicar=${expense.id}`)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent-subtle text-accent">
+                            <CategoryIcon size={16} />
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[14px] text-text-primary">{expense.description}</p>
+                            <p className="text-[16px] font-bold text-text-primary">{formatCurrency(expense.amount)}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex h-6 items-center rounded-full bg-accent-subtle px-5 text-[12px] font-medium text-accent">
+                            {category?.label ?? expense.category}
+                          </span>
+                          <p className="min-w-0 flex-1 truncate text-[12px] text-text-tertiary">
+                            {payerName} pagou em {formatShortDate(expense.date)}
+                          </p>
+                        </div>
+
+                        <div className="rounded-[4px] bg-[rgba(255,255,255,0.04)]">
+                          <button
+                            onClick={() => handleExpenseToggle(expense.id)}
+                            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                          >
+                            <span className="text-[12px] font-medium text-accent">Ver divisao</span>
+                            <ChevronDown
+                              size={16}
+                              className={`text-accent transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+                            />
+                          </button>
+
+                          <div
+                            className="grid transition-[grid-template-rows] duration-200 ease-out"
+                            style={{ gridTemplateRows: isExpanded ? '1fr' : '0fr' }}
+                          >
+                            <div className="overflow-hidden">
+                              <div className="space-y-2 px-4 pb-3">
+                                {shares.map((share) => {
+                                  const isPayer = share.memberId === expense.paid_by_member_id
+
+                                  return (
+                                    <div key={share.memberId} className="flex items-center justify-between gap-3 text-[12px]">
+                                      <span className="min-w-0 flex-1 truncate text-text-secondary">
+                                        {getMemberNameById(share.memberId)} ({formatPercentLabel(share.percentage)})
+                                      </span>
+                                      <span className={isPayer ? 'text-success' : 'text-danger'}>
+                                        {isPayer ? `pagou ${formatCurrency(share.amount)}` : `deve ${formatCurrency(share.amount)}`}
+                                      </span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-2">
-                        <Link
-                          to={`/grupos/${groupId}/despesas/nova?duplicar=${expense.id}`}
-                          className="flex items-center justify-center gap-2 rounded-[8px] py-2 text-[12px] font-medium text-text-tertiary transition-colors hover:bg-white/5 hover:text-text-primary"
-                        >
-                          <Copy size={16} />
-                          Repetir
-                        </Link>
-
-                        {canEdit ? (
-                          <Link
-                            to={`/grupos/${groupId}/despesas/${expense.id}/editar`}
-                            className="flex items-center justify-center gap-2 rounded-[8px] py-2 text-[12px] font-medium text-text-tertiary transition-colors hover:bg-white/5 hover:text-text-primary"
-                          >
-                            <Pencil size={16} />
-                            Editar
-                          </Link>
-                        ) : (
-                          <span className="flex items-center justify-center gap-2 rounded-[8px] py-2 text-[12px] font-medium text-text-tertiary opacity-30 cursor-not-allowed">
-                            <Pencil size={16} />
-                            Editar
-                          </span>
-                        )}
-
-                        {canDelete ? (
-                          <button
-                            onClick={() => setDeleteExpenseId(expense.id)}
-                            className="flex items-center justify-center gap-2 rounded-[8px] py-2 text-[12px] font-medium text-text-tertiary transition-colors hover:bg-white/5 hover:text-danger"
-                          >
-                            <Trash2 size={16} />
-                            Excluir
-                          </button>
-                        ) : (
-                          <span className="flex items-center justify-center gap-2 rounded-[8px] py-2 text-[12px] font-medium text-text-tertiary opacity-30 cursor-not-allowed">
-                            <Trash2 size={16} />
-                            Excluir
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
+                      </SwipeableExpenseCard>
+                    )
+                  })
+                )}
               </div>
-            )
+            )}
+            </>
           ) : null}
 
           {activeTab === 'resumo' ? (
@@ -863,6 +1123,82 @@ export default function GroupDetailPage() {
               </div>
             ) : (
               <div className="flex flex-col gap-[20px]">
+                {chartModel.bars.length > 0 ? (
+                  <section className="flex flex-col gap-[12px]">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[14px] font-normal leading-[1.4] text-[#A7ADBA]">
+                          Evolução diária do mês
+                        </p>
+                      </div>
+                      {selectedChartBar ? (
+                        <div className="shrink-0 text-right">
+                          <p className="text-[11px] text-text-tertiary">
+                            {capitalize(formatChartDate(selectedChartBar.date))}
+                          </p>
+                          <p className="text-[16px] font-bold text-text-primary">
+                            {formatCurrency(selectedChartBar.dailyTotal)}
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="rounded-[8px] bg-[#1C1D25] px-1 py-2 sm:px-1.5">
+                      <div
+                        ref={chartRefCallback}
+                        className="relative h-[180px] cursor-pointer touch-pan-y"
+                        onMouseEnter={(event) => handleChartSelection(event.clientX)}
+                        onMouseMove={(event) => handleChartSelection(event.clientX)}
+                        onClick={(event) => handleChartSelection(event.clientX)}
+                        onTouchStart={(event) => handleChartSelection(event.touches[0].clientX)}
+                        onTouchMove={(event) => handleChartSelection(event.touches[0].clientX)}
+                      >
+                        <svg
+                          viewBox={`0 0 ${chartModel.width} ${chartModel.height}`}
+                          className="h-full w-full overflow-visible"
+                          aria-hidden="true"
+                        >
+                          <line
+                            x1="0"
+                            y1={chartModel.baselineY}
+                            x2={chartModel.width}
+                            y2={chartModel.baselineY}
+                            stroke="rgba(124, 131, 148, 0.18)"
+                            strokeWidth="1"
+                          />
+
+                          {selectedChartBar ? (
+                            <line
+                              x1={selectedChartBar.x + selectedChartBar.width / 2}
+                              y1="8"
+                              x2={selectedChartBar.x + selectedChartBar.width / 2}
+                              y2={chartModel.baselineY}
+                              stroke="rgba(124, 131, 148, 0.18)"
+                              strokeWidth="1"
+                            />
+                          ) : null}
+
+                          {chartModel.bars.map((bar) => {
+                            const isSelected = selectedChartBar?.day === bar.day
+                            const fill = isSelected
+                              ? '#F5C249'
+                              : bar.dailyTotal > 0
+                                ? 'rgba(245, 194, 73, 0.34)'
+                                : 'rgba(124, 131, 148, 0.18)'
+
+                            return <path key={bar.day} d={buildBarPath(bar)} fill={fill} />
+                          })}
+                        </svg>
+                      </div>
+                      <div className="flex items-center justify-between px-1 pb-1 text-[11px] text-text-tertiary">
+                        <span>Dia 1</span>
+                        <span>Dia {Math.ceil(chartModel.bars.length / 2)}</span>
+                        <span>Dia {chartModel.bars.length}</span>
+                      </div>
+                    </div>
+                  </section>
+                ) : null}
+
                 <section className="flex flex-col gap-[8px]">
                   <p className="text-[14px] font-normal leading-[1.4] text-[#A7ADBA]">
                     Gasto total de todos os membros por categoria
@@ -913,37 +1249,36 @@ export default function GroupDetailPage() {
                   </section>
                 ) : null}
 
-                <section className="flex flex-col gap-[8px]">
-                  <p className="text-[14px] font-normal leading-[1.4] text-[#A7ADBA]">
-                    Acerto de Contas
-                  </p>
+                {allRecurring.length > 0 && (
+                  <section className="space-y-3">
+                    <p className="text-[12px] font-medium text-accent">Despesas recorrentes ativas</p>
+                    {allRecurring.map((recurring) => {
+                      const RecIcon = CATEGORY_ICONS[recurring.category] || MoreHorizontal
+                      const catLabel = EXPENSE_CATEGORIES.find((c) => c.value === recurring.category)?.label ?? recurring.category
 
-                  {balances.length > 0 ? (
-                    <div className="flex flex-col gap-[8px]">
-                      {balances.map((balance, index) => (
-                        <div key={index} className="rounded-[8px] bg-[#1C1D25] p-[20px]">
-                          <div className="flex flex-col gap-[8px]">
-                            <div className="flex h-[40px] w-[40px] items-center justify-center rounded-full bg-[rgba(232,93,93,0.16)]">
-                              <DollarSign size={16} className="text-[#E85D5D]" />
-                            </div>
-                            <div className="flex flex-col leading-[1.4]">
-                              <p className="text-[14px] font-normal text-[#A7ADBA]">
-                                {getMemberNameById(balance.from_member_id)} deve pagar para {getMemberNameById(balance.to_member_id)}
-                              </p>
-                              <p className="text-[16px] font-bold text-[#E85D5D]">
-                                {formatCurrency(balance.amount)}
-                              </p>
-                            </div>
+                      return (
+                        <div key={recurring.id} className="flex items-center gap-3 rounded-[8px] border border-dashed border-[rgba(245,194,73,0.16)] p-4">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-subtle text-accent">
+                            <RecIcon size={14} />
                           </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[13px] text-text-primary">{recurring.description}</p>
+                            <p className="text-[11px] text-text-tertiary">
+                              {formatCurrency(recurring.amount)} · {catLabel} · dia {recurring.day_of_month}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteRecurring(recurring.id)}
+                            className="text-text-tertiary transition-colors hover:text-danger"
+                            aria-label="Desativar recorrente"
+                          >
+                            <X size={16} />
+                          </button>
                         </div>
-                      ))}
-                    </div>
-                  ) : memberStats.some((stat) => stat.total_share > 0) ? (
-                    <div className="rounded-[8px] bg-[#1C1D25] p-[20px]">
-                      <p className="text-[16px] leading-[1.4] text-[#4CAF50]">As contas estao quitadas.</p>
-                    </div>
-                  ) : null}
-                </section>
+                      )
+                    })}
+                  </section>
+                )}
               </div>
             )
           ) : null}
