@@ -60,7 +60,7 @@ export default function AppLayout() {
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-[#101116] text-[#F5F7FA]">
-      <header className="sticky top-0 shrink-0 z-40 border-b border-[#16171D] bg-[#101116]">
+      <header className="sticky top-0 shrink-0 z-40 border-b border-[#16171D] bg-[#101116] pt-[env(safe-area-inset-top)]">
         <div className="mx-auto flex w-full sm:max-w-[900px] items-center gap-2 px-5 sm:px-0 py-4">
           <Link
             to="/grupos"
