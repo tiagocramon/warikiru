@@ -7,7 +7,7 @@ export default function PublicHeader() {
   const isDemoPage = pathname === '/conheca-mais'
 
   return (
-    <header className="flex items-center gap-2 px-5 sm:px-0 pb-10 pt-10">
+    <header className="flex items-center gap-2 px-5 sm:px-0 pb-10 pt-10 pt-[max(2.5rem,env(safe-area-inset-top))]">
       <div className="flex min-h-[56px] flex-1 items-center">
         <Link to="/">
           <img

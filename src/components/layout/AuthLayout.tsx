@@ -17,7 +17,7 @@ export default function AuthLayout() {
   if (user) return <Navigate to={redirectTo} replace />
 
   return (
-    <div className="min-h-screen bg-surface-0 flex flex-col items-center justify-center p-4 relative">
+    <div className="min-h-screen bg-surface-0 flex flex-col items-center justify-center p-4 pt-[max(1rem,env(safe-area-inset-top))] relative">
       {/* Subtle gradient background */}
       <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,rgba(245,194,73,0.05),transparent_70%)] pointer-events-none" />
 
