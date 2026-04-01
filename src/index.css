@@ -93,4 +93,8 @@
   .min-h-app {
     min-height: var(--app-height);
   }
+
+  .h-app {
+    height: var(--app-height);
+  }
 }

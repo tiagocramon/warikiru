@@ -1,22 +1,18 @@
 import { useLayoutEffect } from 'react'
 
-function isIOSStandalonePWA() {
+function isIOSDevice() {
   const platform = navigator.platform
   const userAgent = navigator.userAgent
   const maxTouchPoints = navigator.maxTouchPoints || 0
-  const isIOSDevice =
+  return (
     /iPad|iPhone|iPod/.test(userAgent) ||
     (platform === 'MacIntel' && maxTouchPoints > 1)
-  const isStandalone =
-    ('standalone' in navigator && (navigator as Navigator & { standalone?: boolean }).standalone) ||
-    window.matchMedia('(display-mode: standalone)').matches
-
-  return isIOSDevice && isStandalone
+  )
 }
 
 export function useIOSStandaloneViewportFix() {
   useLayoutEffect(() => {
-    if (!isIOSStandalonePWA()) return
+    if (!isIOSDevice()) return
 
     const root = document.documentElement
     const visualViewport = window.visualViewport
@@ -24,7 +20,7 @@ export function useIOSStandaloneViewportFix() {
     let focusOutTimeoutId: number | null = null
 
     function syncAppHeight() {
-      const viewportHeight = visualViewport?.height ?? window.innerHeight
+      const viewportHeight = Math.round(visualViewport?.height ?? window.innerHeight)
       root.style.setProperty('--app-height', `${viewportHeight}px`)
     }
 
