@@ -58,7 +58,7 @@ export default function InviteAcceptPage() {
   }
 
   return (
-    <div className="min-h-screen bg-surface-0 flex items-center justify-center p-4">
+    <div className="min-h-app bg-surface-0 flex items-center justify-center p-4">
       <div className="text-center max-w-sm">
         <div className="flex justify-center mb-6">
           {iconMap[status]}

@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 :root {
+  --app-height: 100vh;
   --background: #101116;
   --surface-01: #16171D;
   --surface-02: #1C1D25;
@@ -16,9 +17,18 @@
   --text-tertiary: #7C8394;
 }
 
+@supports (height: 100dvh) {
+  :root {
+    --app-height: 100dvh;
+  }
+}
+
 @layer base {
-  html {
+  html, body {
     background-color: var(--background);
+  }
+
+  html {
     color: var(--text-primary);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -78,5 +88,9 @@
 
   .pb-safe {
     padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .min-h-app {
+    min-height: var(--app-height);
   }
 }
