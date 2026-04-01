@@ -54,14 +54,16 @@ export default function AuthPixelShell({
         <PublicHeader compact />
       </div>
 
-      <main className={`scrollbar-hide mx-auto flex flex-1 w-full flex-col overflow-y-auto overscroll-contain px-5 pt-6 pb-[max(3rem,env(safe-area-inset-bottom,0px))] [-webkit-overflow-scrolling:touch] sm:max-w-[900px] sm:px-0 sm:py-12 ${fullWidth ? '' : 'sm:items-center'}`}>
-        <div className={`mt-auto flex w-full ${fullWidth ? '' : 'sm:max-w-[600px]'} flex-col gap-8 rounded-[20px] bg-[#101116]`}>
-          {title ? (
-            <h1 className="text-[32px] font-normal leading-none text-[#F5F7FA]">
-              {title}
-            </h1>
-          ) : null}
-          {children}
+      <main className="scrollbar-hide mx-auto flex flex-1 w-full flex-col overflow-y-auto overscroll-contain px-5 pt-6 pb-[max(1.25rem,env(safe-area-inset-bottom,0px))] [-webkit-overflow-scrolling:touch] sm:max-w-[900px] sm:px-0 sm:py-12">
+        <div className={`flex min-h-full flex-col justify-end ${fullWidth ? '' : 'sm:items-center'}`}>
+          <div className={`flex w-full ${fullWidth ? '' : 'sm:max-w-[600px]'} flex-col gap-8 rounded-[20px] bg-[#101116]`}>
+            {title ? (
+              <h1 className="text-[32px] font-normal leading-none text-[#F5F7FA]">
+                {title}
+              </h1>
+            ) : null}
+            {children}
+          </div>
         </div>
       </main>
     </div>
