@@ -10,11 +10,12 @@ export default function LandingPage() {
   if (user) return <Navigate to="/grupos" replace />
 
   return (
-    <div className="min-h-dvh bg-[#101116] text-[#F5F7FA]">
-      <div className="mx-auto flex min-h-dvh w-full sm:max-w-[900px] flex-col bg-[#101116]">
+    <div className="flex min-h-app flex-col bg-[#101116] text-[#F5F7FA]">
+      <div className="mx-auto w-full sm:max-w-[900px]">
         <PublicHeader />
+      </div>
 
-        <main className="flex flex-1 flex-col justify-end gap-10 px-5 sm:px-0 pb-10">
+      <main className="mx-auto flex flex-1 w-full sm:max-w-[900px] flex-col justify-end gap-10 px-5 sm:px-0 pb-[max(2.5rem,env(safe-area-inset-bottom))]">
           <section className="flex flex-col gap-5">
             <h1 className="text-[48px] font-normal leading-none tracking-normal text-[#F5F7FA]">
               <span className="block sm:inline">Divida contas </span>
@@ -42,8 +43,7 @@ export default function LandingPage() {
               Criar Conta
             </Link>
           </div>
-        </main>
-      </div>
+      </main>
     </div>
   )
 }

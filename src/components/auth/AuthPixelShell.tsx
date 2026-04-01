@@ -13,21 +13,21 @@ export default function AuthPixelShell({
   fullWidth = false,
 }: AuthPixelShellProps) {
   return (
-    <div className="min-h-dvh bg-[#101116] text-[#F5F7FA]">
-      <div className="mx-auto flex min-h-dvh w-full sm:max-w-[900px] flex-col bg-[#101116]">
+    <div className="flex min-h-app flex-col bg-[#101116] text-[#F5F7FA]">
+      <div className="mx-auto w-full sm:max-w-[900px]">
         <PublicHeader />
-
-        <main className={`flex flex-1 flex-col justify-end px-5 sm:px-0 py-12 ${fullWidth ? '' : 'sm:items-center'}`}>
-          <div className={`flex w-full ${fullWidth ? '' : 'sm:max-w-[600px]'} flex-col gap-8 rounded-[20px] bg-[#101116]`}>
-            {title ? (
-              <h1 className="text-[32px] font-normal leading-none text-[#F5F7FA]">
-                {title}
-              </h1>
-            ) : null}
-            {children}
-          </div>
-        </main>
       </div>
+
+      <main className={`mx-auto flex flex-1 w-full flex-col px-5 pt-24 pb-[max(3rem,env(safe-area-inset-bottom,0px))] sm:max-w-[900px] sm:justify-end sm:px-0 sm:py-12 ${fullWidth ? '' : 'sm:items-center'}`}>
+        <div className={`flex w-full ${fullWidth ? '' : 'sm:max-w-[600px]'} flex-col gap-8 rounded-[20px] bg-[#101116]`}>
+          {title ? (
+            <h1 className="text-[32px] font-normal leading-none text-[#F5F7FA]">
+              {title}
+            </h1>
+          ) : null}
+          {children}
+        </div>
+      </main>
     </div>
   )
 }
