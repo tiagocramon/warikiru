@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useLayoutEffect } from 'react'
 
 function isIOSStandalonePWA() {
   const platform = navigator.platform
@@ -15,7 +15,7 @@ function isIOSStandalonePWA() {
 }
 
 export function useIOSStandaloneViewportFix() {
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isIOSStandalonePWA()) return
 
     const root = document.documentElement
