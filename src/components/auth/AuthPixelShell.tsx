@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import PublicHeader from '../public/PublicHeader'
 
 interface AuthPixelShellProps {
@@ -12,8 +12,44 @@ export default function AuthPixelShell({
   children,
   fullWidth = false,
 }: AuthPixelShellProps) {
+  useEffect(() => {
+    const htmlStyle = document.documentElement.style
+    const bodyStyle = document.body.style
+    const scrollY = window.scrollY
+
+    const previousHtmlOverflow = htmlStyle.overflow
+    const previousBodyOverflow = bodyStyle.overflow
+    const previousBodyPosition = bodyStyle.position
+    const previousBodyTop = bodyStyle.top
+    const previousBodyLeft = bodyStyle.left
+    const previousBodyRight = bodyStyle.right
+    const previousBodyWidth = bodyStyle.width
+    const previousBodyOverscrollBehavior = bodyStyle.overscrollBehavior
+
+    htmlStyle.overflow = 'hidden'
+    bodyStyle.overflow = 'hidden'
+    bodyStyle.position = 'fixed'
+    bodyStyle.top = `-${scrollY}px`
+    bodyStyle.left = '0'
+    bodyStyle.right = '0'
+    bodyStyle.width = '100%'
+    bodyStyle.overscrollBehavior = 'none'
+
+    return () => {
+      htmlStyle.overflow = previousHtmlOverflow
+      bodyStyle.overflow = previousBodyOverflow
+      bodyStyle.position = previousBodyPosition
+      bodyStyle.top = previousBodyTop
+      bodyStyle.left = previousBodyLeft
+      bodyStyle.right = previousBodyRight
+      bodyStyle.width = previousBodyWidth
+      bodyStyle.overscrollBehavior = previousBodyOverscrollBehavior
+      window.scrollTo(0, scrollY)
+    }
+  }, [])
+
   return (
-    <div className="flex h-app min-h-app flex-col overflow-hidden bg-[#101116] text-[#F5F7FA]">
+    <div className="fixed inset-0 flex h-app min-h-app flex-col overflow-hidden bg-[#101116] text-[#F5F7FA]">
       <div className="mx-auto w-full sm:max-w-[900px]">
         <PublicHeader compact />
       </div>
