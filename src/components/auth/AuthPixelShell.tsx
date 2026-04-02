@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from 'react'
 import PublicHeader from '../public/PublicHeader'
+import { isIOSStandalonePWA } from '../../hooks/useIOSKeyboardFix'
 
 interface AuthPixelShellProps {
   title?: string
@@ -12,7 +13,12 @@ export default function AuthPixelShell({
   children,
   fullWidth = false,
 }: AuthPixelShellProps) {
+  const standalonePWA =
+    typeof window !== 'undefined' && isIOSStandalonePWA()
+
   useEffect(() => {
+    if (!standalonePWA) return
+
     const htmlStyle = document.documentElement.style
     const bodyStyle = document.body.style
     const scrollY = window.scrollY
@@ -46,10 +52,31 @@ export default function AuthPixelShell({
       bodyStyle.overscrollBehavior = previousBodyOverscrollBehavior
       window.scrollTo(0, scrollY)
     }
-  }, [])
+  }, [standalonePWA])
+
+  if (!standalonePWA) {
+    return (
+      <div className="min-h-dvh bg-[#101116] text-[#F5F7FA]">
+        <div className="mx-auto flex min-h-dvh w-full sm:max-w-[900px] flex-col bg-[#101116]">
+          <PublicHeader />
+
+          <main className={`flex flex-1 flex-col justify-end px-5 py-12 sm:px-0 ${fullWidth ? '' : 'sm:items-center'}`}>
+            <div className={`flex w-full ${fullWidth ? '' : 'sm:max-w-[600px]'} flex-col gap-8 rounded-[20px] bg-[#101116]`}>
+              {title ? (
+                <h1 className="text-[32px] font-normal leading-none text-[#F5F7FA]">
+                  {title}
+                </h1>
+              ) : null}
+              {children}
+            </div>
+          </main>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="fixed inset-0 flex h-app min-h-app flex-col overflow-hidden bg-[#101116] text-[#F5F7FA]">
+    <div className="fixed inset-0 flex flex-col overflow-hidden bg-[#101116] text-[#F5F7FA]">
       <div className="mx-auto w-full sm:max-w-[900px]">
         <PublicHeader compact />
       </div>

@@ -10,6 +10,16 @@ function isIOSDevice() {
   )
 }
 
+export function isIOSStandalonePWA() {
+  if (!isIOSDevice()) return false
+
+  return (
+    ('standalone' in navigator &&
+      (navigator as Navigator & { standalone?: boolean }).standalone === true) ||
+    window.matchMedia('(display-mode: standalone)').matches
+  )
+}
+
 function isTextInputElement(
   element: Element | null
 ): element is HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement {
@@ -26,7 +36,7 @@ function isTextInputElement(
 
 export function useIOSStandaloneViewportFix() {
   useLayoutEffect(() => {
-    if (!isIOSDevice()) return
+    if (!isIOSStandalonePWA()) return
 
     const root = document.documentElement
     const visualViewport = window.visualViewport
