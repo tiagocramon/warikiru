@@ -43,25 +43,34 @@ export function useIOSStandaloneViewportFix() {
     let settleTimeoutId: number | null = null
     let focusInTimeoutId: number | null = null
     let focusOutTimeoutId: number | null = null
-    let committedHeight = Math.round(visualViewport?.height ?? window.innerHeight)
+    let committedHeight = getStableViewportHeight()
 
-    function getViewportHeight() {
+    function getVisualViewportHeight() {
       return Math.round(visualViewport?.height ?? window.innerHeight)
     }
 
+    function getStableViewportHeight() {
+      return Math.max(
+        Math.round(window.innerHeight),
+        getVisualViewportHeight()
+      )
+    }
+
     function syncAppHeight(force = false) {
-      const viewportHeight = getViewportHeight()
+      const visualViewportHeight = getVisualViewportHeight()
+      const stableViewportHeight = getStableViewportHeight()
       const activeElement = document.activeElement
       const keyboardLikelyOpen =
-        isTextInputElement(activeElement) && viewportHeight < committedHeight - 120
+        isTextInputElement(activeElement) &&
+        visualViewportHeight < committedHeight - 120
 
       if (!force && keyboardLikelyOpen) {
         root.style.setProperty('--app-height', `${committedHeight}px`)
         return
       }
 
-      committedHeight = viewportHeight
-      root.style.setProperty('--app-height', `${viewportHeight}px`)
+      committedHeight = stableViewportHeight
+      root.style.setProperty('--app-height', `${stableViewportHeight}px`)
     }
 
     function queueSettledSync(delay = 250) {

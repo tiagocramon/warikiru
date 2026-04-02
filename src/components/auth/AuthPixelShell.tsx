@@ -76,21 +76,21 @@ export default function AuthPixelShell({
   }
 
   return (
-    <div className="fixed inset-0 flex flex-col overflow-hidden bg-[#101116] text-[#F5F7FA]">
-      <div className="mx-auto w-full sm:max-w-[900px]">
+    <div className="fixed inset-x-0 top-0 h-app overflow-hidden bg-[#101116] text-[#F5F7FA]">
+      <div className="mx-auto flex h-full w-full flex-col overflow-hidden sm:max-w-[900px]">
         <PublicHeader compact />
-      </div>
 
-      <main className={`scrollbar-hide mx-auto flex min-h-0 flex-1 w-full flex-col justify-end overflow-y-auto overscroll-contain px-5 pt-6 pb-[max(1.25rem,env(safe-area-inset-bottom,0px))] [-webkit-overflow-scrolling:touch] sm:max-w-[900px] sm:px-0 sm:py-12 ${fullWidth ? '' : 'sm:items-center'}`}>
-        <div className={`flex w-full ${fullWidth ? '' : 'sm:max-w-[600px]'} flex-col gap-8 rounded-[20px] bg-[#101116]`}>
-          {title ? (
-            <h1 className="text-[32px] font-normal leading-none text-[#F5F7FA]">
-              {title}
-            </h1>
-          ) : null}
-          {children}
-        </div>
-      </main>
+        <main className={`scrollbar-hide flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-5 pt-6 pb-[max(1.25rem,env(safe-area-inset-bottom,0px))] [-webkit-overflow-scrolling:touch] sm:px-0 sm:py-12 ${fullWidth ? '' : 'sm:items-center'}`}>
+          <div className={`mt-auto flex w-full ${fullWidth ? '' : 'sm:max-w-[600px]'} flex-col gap-8 rounded-[20px] bg-[#101116]`}>
+            {title ? (
+              <h1 className="text-[32px] font-normal leading-none text-[#F5F7FA]">
+                {title}
+              </h1>
+            ) : null}
+            {children}
+          </div>
+        </main>
+      </div>
     </div>
   )
 }
