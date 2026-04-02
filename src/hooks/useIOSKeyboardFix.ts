@@ -20,6 +20,13 @@ export function isIOSStandalonePWA() {
   )
 }
 
+export function readIOSStandaloneViewportHeight() {
+  return Math.max(
+    Math.round(window.innerHeight),
+    Math.round(window.visualViewport?.height ?? window.innerHeight)
+  )
+}
+
 function isTextInputElement(
   element: Element | null
 ): element is HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement {
@@ -43,34 +50,27 @@ export function useIOSStandaloneViewportFix() {
     let settleTimeoutId: number | null = null
     let focusInTimeoutId: number | null = null
     let focusOutTimeoutId: number | null = null
-    let committedHeight = getStableViewportHeight()
+    let committedHeight = readIOSStandaloneViewportHeight()
 
-    function getVisualViewportHeight() {
+    function getVisibleViewportHeight() {
       return Math.round(visualViewport?.height ?? window.innerHeight)
     }
 
-    function getStableViewportHeight() {
-      return Math.max(
-        Math.round(window.innerHeight),
-        getVisualViewportHeight()
-      )
-    }
-
     function syncAppHeight(force = false) {
-      const visualViewportHeight = getVisualViewportHeight()
-      const stableViewportHeight = getStableViewportHeight()
+      const visibleViewportHeight = getVisibleViewportHeight()
+      const viewportHeight = readIOSStandaloneViewportHeight()
       const activeElement = document.activeElement
       const keyboardLikelyOpen =
         isTextInputElement(activeElement) &&
-        visualViewportHeight < committedHeight - 120
+        visibleViewportHeight < committedHeight - 120
 
       if (!force && keyboardLikelyOpen) {
         root.style.setProperty('--app-height', `${committedHeight}px`)
         return
       }
 
-      committedHeight = stableViewportHeight
-      root.style.setProperty('--app-height', `${stableViewportHeight}px`)
+      committedHeight = viewportHeight
+      root.style.setProperty('--app-height', `${viewportHeight}px`)
     }
 
     function queueSettledSync(delay = 250) {
