@@ -223,7 +223,7 @@ export default function DemoPage() {
   return (
     <div className="min-h-app bg-[#101116] text-[#F5F7FA]">
       <div className="mx-auto flex w-full sm:max-w-[900px] flex-col bg-[#101116]">
-        <PublicHeader />
+        <PublicHeader compact />
 
         <main className="flex flex-col px-5 sm:px-0">
           {/* Hero - Conceito Warikiru */}

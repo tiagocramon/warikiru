@@ -12,7 +12,7 @@ export default function LandingPage() {
   return (
     <div className="flex min-h-app flex-col bg-[#101116] text-[#F5F7FA]">
       <div className="mx-auto w-full sm:max-w-[900px]">
-        <PublicHeader />
+        <PublicHeader compact />
       </div>
 
       <main className="mx-auto flex flex-1 w-full sm:max-w-[900px] flex-col justify-end gap-10 px-5 sm:px-0 pb-[max(2.5rem,env(safe-area-inset-bottom))]">
